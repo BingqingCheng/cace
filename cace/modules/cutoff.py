@@ -8,6 +8,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+__all__ = ["CosineCutoff", "MollifierCutoff", "PolynomialCutoff", "SwitchFunction"]
+
 def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
     """ Behler-style cosine cutoff.
 

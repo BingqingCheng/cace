@@ -64,15 +64,19 @@ class Cace(nn.Module):
         
         # setup
         data["positions"].requires_grad_(True)
-        n_nodes = data.num_nodes
+        n_nodes = data['positions'].shape[0]
+        try:
+            num_graphs = data["ptr"].numel() - 1
+        except:
+            num_graphs = 1
 
         # Embeddings
         ## code each node/element in one-hot way
         node_one_hot = self.node_onehot(data['atomic_numbers'])
-        
+
         ## embed to a different dimension
         node_embedded = self.node_embedding(node_one_hot)
-        
+
         ## get the edge type
         edge_type = get_edge_node_type(edge_index=data["edge_index"], 
                               node_type=node_embedded)

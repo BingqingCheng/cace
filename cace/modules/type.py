@@ -8,6 +8,12 @@ from ..tools import (
     to_one_hot,
 )
 
+__all__ = [
+    'NodeEncoder',
+    'NodeEmbedding',
+    'EdgeEncoder',
+]
+
 class NodeEncoder(nn.Module):
     def __init__(self, zs: Sequence[int]):
         super().__init__()
@@ -27,7 +33,7 @@ class NodeEmbedding(nn.Module):
         super().__init__()
         self.weights = nn.Parameter(torch.Tensor(node_dim, embedding_dim))
         if random_seed is not None:
-	    torch.manual_seed(random_seed)
+            torch.manual_seed(random_seed)
         self.reset_parameters()
 
     def reset_parameters(self):

@@ -8,6 +8,8 @@ from typing import List, Optional, Tuple
 
 import torch
 
+__all__ = ["get_edge_vectors_and_lengths", "get_edge_node_type"]
+
 def get_edge_vectors_and_lengths(
     positions: torch.Tensor,  # [n_nodes, 3]
     edge_index: torch.Tensor,  # [2, n_edges]

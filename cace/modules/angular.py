@@ -21,7 +21,9 @@ class AngularComponent(nn.Module):
             raise TypeError("Input must be a torch.Tensor")
         if vectors.dim() != 2 or vectors.size(1) != 3:
             raise ValueError("Input tensor must have shape [N, 3]")
-
+        
+        self.lxlylz_dict = OrderedDict({l: [] for l in range(self.l_max + 1)})
+        self.lxlylz_list = None
         N, _ = vectors.shape
         self.lxlylz_dict[0] = [[0, 0, 0]]
         computed_values = {(0, 0, 0): torch.ones(N, device=vectors.device)}

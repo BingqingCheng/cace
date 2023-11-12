@@ -16,7 +16,9 @@ from .utils import Configuration
 
 
 class AtomicData(torch_geometric.data.Data):
+    atomic_numbers: torch.Tensor
     num_graphs: torch.Tensor
+    num_nodes: torch.Tensor
     batch: torch.Tensor
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
@@ -43,6 +45,7 @@ class AtomicData(torch_geometric.data.Data):
         self,
         edge_index: torch.Tensor,  # [2, n_edges], always sender -> receiver
         atomic_numbers: torch.Tensor,  # [n_nodes]
+        num_nodes: torch.Tensor, #[,]
         positions: torch.Tensor,  # [n_nodes, 3]
         shifts: torch.Tensor,  # [n_edges, 3],
         unit_shifts: torch.Tensor,  # [n_edges, 3]
@@ -60,8 +63,7 @@ class AtomicData(torch_geometric.data.Data):
         charges: Optional[torch.Tensor],  # [n_nodes, ]
     ):
         # Check shapes
-        num_nodes = atomic_numbers.shape[0]
-
+        assert num_nodes == atomic_numbers.shape[0]
         assert edge_index.shape[0] == 2 and len(edge_index.shape) == 2
         assert positions.shape == (num_nodes, 3)
         assert shifts.shape[1] == 3
@@ -87,6 +89,7 @@ class AtomicData(torch_geometric.data.Data):
             "unit_shifts": unit_shifts,
             "cell": cell,
             "atomic_numbers": atomic_numbers,
+            "num_nodes": num_nodes,
             "weight": weight,
             "energy_weight": energy_weight,
             "forces_weight": forces_weight,
@@ -110,7 +113,7 @@ class AtomicData(torch_geometric.data.Data):
             positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
   
-        atomic_numbers = config.atomic_numbers
+        atomic_numbers = torch.tensor(config.atomic_numbers, dtype=torch.long)
 
         cell = (
             torch.tensor(config.cell, dtype=torch.get_default_dtype())
@@ -190,6 +193,7 @@ class AtomicData(torch_geometric.data.Data):
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
             atomic_numbers=atomic_numbers,
+            num_nodes=atomic_numbers.shape[0],
             weight=weight,
             energy_weight=energy_weight,
             forces_weight=forces_weight,
