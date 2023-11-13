@@ -20,3 +20,5 @@ from .utils import *
 from .blocks import *
 
 from .atomwise import *
+
+from .forces import *

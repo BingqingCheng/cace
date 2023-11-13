@@ -4,6 +4,7 @@ from .torch_tools import (
     to_numpy, 
     voigt_to_matrix, 
     to_one_hot,
+    init_device,
 )
 
 from .utils import (

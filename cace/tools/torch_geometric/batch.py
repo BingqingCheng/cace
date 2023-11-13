@@ -18,7 +18,7 @@ class Batch(Data):
     """
 
     def __init__(self, batch=None, ptr=None, **kwargs):
-        super(Batch, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         for key, item in kwargs.items():
             if key == "num_nodes":
@@ -44,7 +44,11 @@ class Batch(Data):
         :obj:`follow_batch`.
         Will exclude any keys given in :obj:`exclude_keys`."""
 
-        keys = list(set(data_list[0].keys) - set(exclude_keys))
+        # this is for the competibility of different pytorch versions
+        try:
+            keys = list(set(data_list[0].keys) - set(exclude_keys))
+        except:
+            keys = list(set(data_list[0].keys()) - set(exclude_keys))
         assert "batch" not in keys and "ptr" not in keys
 
         batch = cls()
@@ -231,7 +235,7 @@ class Batch(Data):
 
     def __getitem__(self, idx):
         if isinstance(idx, str):
-            return super(Batch, self).__getitem__(idx)
+            return super().__getitem__(idx)
         elif isinstance(idx, (int, np.integer)):
             return self.get_example(idx)
         else:

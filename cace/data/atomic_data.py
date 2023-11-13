@@ -63,7 +63,7 @@ class AtomicData(torch_geometric.data.Data):
         charges: Optional[torch.Tensor],  # [n_nodes, ]
     ):
         # Check shapes
-        assert num_nodes == atomic_numbers.shape[0]
+        #assert num_nodes == atomic_numbers.shape[0]
         assert edge_index.shape[0] == 2 and len(edge_index.shape) == 2
         assert positions.shape == (num_nodes, 3)
         assert shifts.shape[1] == 3

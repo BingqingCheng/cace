@@ -50,7 +50,9 @@ class Cace(nn.Module):
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
         self.angular_basis = AngularComponent(self.max_l)
-        
+
+        if max_nu > 4:
+            raise NotImplementedError("max_nu > 4 is not supported yet.")         
         self.vec_dict_allnu = {}
         self.vec_dict_allnu[2], _, _  = find_combo_vectors_nu2(self.max_l)
         self.vec_dict_allnu[3], _, _  = find_combo_vectors_nu3(self.max_l)
@@ -63,7 +65,7 @@ class Cace(nn.Module):
         # check if all elements included in self.zs
         
         # setup
-        data["positions"].requires_grad_(True)
+        #data["positions"].requires_grad_(True)
         n_nodes = data['positions'].shape[0]
         try:
             num_graphs = data["ptr"].numel() - 1

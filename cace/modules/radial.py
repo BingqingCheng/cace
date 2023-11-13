@@ -30,7 +30,7 @@ class BesselRBF(nn.Module):
             )
         )
         if trainable:
-            self.bessel_weights = torch.nn.Parameter(bessel_weights)
+            self.bessel_weights = nn.Parameter(bessel_weights)
         else:
             self.register_buffer("bessel_weights", bessel_weights)
 

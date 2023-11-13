@@ -29,18 +29,23 @@ class NodeEncoder(nn.Module):
         return one_hot_encoding
 
 class NodeEmbedding(nn.Module):
-    def __init__(self, node_dim, embedding_dim, random_seed=42):
+    def __init__(self, node_dim:int, embedding_dim:int, trainable=True, random_seed=42):
         super().__init__()
-        self.weights = nn.Parameter(torch.Tensor(node_dim, embedding_dim))
+        embedding_weights = torch.Tensor(node_dim, embedding_dim)
         if random_seed is not None:
             torch.manual_seed(random_seed)
-        self.reset_parameters()
+        self.reset_parameters(embedding_weights)
 
-    def reset_parameters(self):
-        nn.init.xavier_uniform_(self.weights.data)
+        if trainable:
+            self.embedding_weights = nn.Parameter(embedding_weights)
+        else:
+            self.register_buffer("embedding_weights", embedding_weights)
+
+    def reset_parameters(self, embedding_weights):
+        nn.init.xavier_uniform_(embedding_weights)
 
     def forward(self, data):
-        return torch.mm(data, self.weights)
+        return torch.mm(data, self.embedding_weights)
 
 class EdgeEncoder(nn.Module):
     def __init__(self, directed=False):
