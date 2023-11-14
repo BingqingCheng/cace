@@ -1,70 +1,44 @@
 import torch
+import numpy as np
 
-__all__ = ['symmetrize_A_basis']
+__all__ = ['Symmetrizer']
 
-def symmetrize_A_basis(nu_max: int, 
-                       vec_dict_allnu: dict,
-                       node_attr: torch.Tensor, 
-                       l_list: list):
-    """
-    Symmetrize the node attributes for the A basis,
-    to make the B basis.
-    """
-    num_nodes, n_radial, n_angular, n_chanel = node_attr.size()
-    sym_node_attr = {}
-
-    for nu in range(1, nu_max+1):
-        if nu == 1:
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, 1, n_chanel), 
-                                          dtype=node_attr.dtype, device=node_attr.device)
-            sym_node_attr[nu][:,:,0,:] = node_attr[:,:,0,:]
-            #print(sym_node_attr[nu].shape)
-
-        if nu == 2:
-            vec_dict = vec_dict_allnu[2]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
-                                          dtype=node_attr.dtype, device=node_attr.device)
-
-            for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
-                #print(l_now)
-                for (lxlylz1, prefactor) in lxlylz_list:
-                    index_1 = l_list.index(lxlylz1)
-                    sym_node_attr[nu][:,:,i,:] += prefactor * \
-                        node_attr[:,:,index_1,:] * node_attr[:,:,index_1,:]
-            #print(sym_node_attr[nu].shape)
-
-        if nu == 3:
-            vec_dict = vec_dict_allnu[3]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
-                                          dtype=node_attr.dtype, device=node_attr.device)
-
-            for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
-                #print(l_now)
-                for (lxlylz1, lxlylz2, lxlylz3, prefactor) in lxlylz_list:
-                    index_1 = l_list.index(lxlylz1)
-                    index_2 = l_list.index(lxlylz2)
-                    index_3 = l_list.index(lxlylz3)
-                    sym_node_attr[nu][:,:,i,:] += prefactor * \
-                        node_attr[:,:,index_1,:] * node_attr[:,:,index_2,:] * node_attr[:,:,index_3,:]
-            #print(sym_node_attr[nu].shape)
-
-        if nu == 4:
-            vec_dict = vec_dict_allnu[4]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
-                                          dtype=node_attr.dtype, device=node_attr.device)
-
-            for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
-                for (lxlylz1, lxlylz2, lxlylz3, lxlylz4, prefactor) in lxlylz_list:
-                    index_1 = l_list.index(lxlylz1)
-                    index_2 = l_list.index(lxlylz2)
-                    index_3 = l_list.index(lxlylz3)
-                    index_4 = l_list.index(lxlylz4)
-                    sym_node_attr[nu][:,:,i,:] += prefactor * \
-                        node_attr[:,:,index_1,:] * node_attr[:,:,index_2,:] * \
-                        node_attr[:,:,index_3,:] * node_attr[:,:,index_4,:]
-            #print(sym_node_attr[nu].shape)
-
-        if nu >= 5:
+class Symmetrizer:
+    def __init__(self, nu_max: int, vec_dict_allnu: dict, l_list: list):
+        if nu_max >= 5:
             raise NotImplementedError
 
-    return torch.cat(list(sym_node_attr.values()), dim=2) 
+        self.nu_max = nu_max
+        self.vec_dict_allnu = vec_dict_allnu
+
+        # Convert elements of l_list to tuples for dictionary keys
+        l_list_tuples = [tuple(l) for l in l_list]
+        # Create a dictionary to map tuple to index
+        self.l_list_indices = {l_tuple: i for i, l_tuple in enumerate(l_list_tuples)}
+
+    def symmetrize_A_basis(self, node_attr: torch.Tensor):
+        num_nodes, n_radial, _, n_chanel = node_attr.size()
+        n_angular_sym = 1 + np.sum([len(self.vec_dict_allnu[nu]) for nu in range(2, self.nu_max + 1)])
+        sym_node_attr = torch.zeros((num_nodes, n_radial, n_angular_sym, n_chanel),
+                                    dtype=node_attr.dtype, device=node_attr.device)
+
+        # Directly assign for nu == 1
+        sym_node_attr[:, :, 0, :] = node_attr[:, :, 0, :]
+        n_sym_node_attr = 1
+
+        for nu in range(2, self.nu_max + 1):
+            vec_dict = self.vec_dict_allnu[nu]
+            for i, (_, lxlylz_list) in enumerate(vec_dict.items()):
+                for item in lxlylz_list:
+                    prefactor = item[-1]
+                    indices = [self.l_list_indices[tuple(lxlylz)] for lxlylz in item[:-1]]
+                    product = torch.prod(node_attr[:, :, indices, :], dim=2) if nu > 2 else node_attr[:, :, indices[0], :] ** 2
+                    sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
+            n_sym_node_attr += len(vec_dict)
+
+        return sym_node_attr
+
+# Example usage
+# symmetrizer = Symmetrizer(nu_max, vec_dict_allnu, l_list)
+# result = symmetrizer.symmetrize_A_basis(node_attr)
+

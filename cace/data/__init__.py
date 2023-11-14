@@ -3,7 +3,6 @@ from .neighborhood import get_neighborhood
 from .utils import (
     Configuration,
     Configurations,
-    compute_average_E0s,
     config_from_atoms,
     config_from_atoms_list,
     load_from_xyz,
