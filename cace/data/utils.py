@@ -1,6 +1,6 @@
 ###########################################################################################
 # Data parsing utilities
-# Authors: Ilyes Batatia, Gregor Simm and David Kovacs
+# modified from MACE
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 

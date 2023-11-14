@@ -15,13 +15,15 @@ def symmetrize_A_basis(nu_max: int,
 
     for nu in range(1, nu_max+1):
         if nu == 1:
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, 1, n_chanel))
+            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, 1, n_chanel), 
+                                          dtype=node_attr.dtype, device=node_attr.device)
             sym_node_attr[nu][:,:,0,:] = node_attr[:,:,0,:]
             #print(sym_node_attr[nu].shape)
 
         if nu == 2:
             vec_dict = vec_dict_allnu[2]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel))
+            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
+                                          dtype=node_attr.dtype, device=node_attr.device)
 
             for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
                 #print(l_now)
@@ -33,7 +35,8 @@ def symmetrize_A_basis(nu_max: int,
 
         if nu == 3:
             vec_dict = vec_dict_allnu[3]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel))
+            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
+                                          dtype=node_attr.dtype, device=node_attr.device)
 
             for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
                 #print(l_now)
@@ -47,7 +50,8 @@ def symmetrize_A_basis(nu_max: int,
 
         if nu == 4:
             vec_dict = vec_dict_allnu[4]
-            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel))
+            sym_node_attr[nu] = torch.zeros((num_nodes, n_radial, len(vec_dict), n_chanel),
+                                          dtype=node_attr.dtype, device=node_attr.device)
 
             for i, (l_now, lxlylz_list) in enumerate(vec_dict.items()):
                 for (lxlylz1, lxlylz2, lxlylz3, lxlylz4, prefactor) in lxlylz_list:

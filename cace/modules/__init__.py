@@ -1,9 +1,4 @@
-from .angular import (
-    AngularComponent,
-    AngularComponent_old,
-    l_index_select,
-    lxlylz_factorial_coef,
-)
+from .angular import *
 
 from .angular_tools import *
 

@@ -1,6 +1,6 @@
 ###########################################################################################
 # Neighborhood construction
-# Authors: Ilyes Batatia, Gregor Simm
+# modified from MACE
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 

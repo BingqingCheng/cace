@@ -2,12 +2,6 @@ import torch
 import torch.nn as nn
 from typing import Sequence
 
-from ..tools import (
-    AtomicNumberTable,
-    atomic_numbers_to_indices,
-    to_one_hot,
-)
-
 __all__ = [
     'NodeEncoder',
     'NodeEmbedding',
@@ -17,16 +11,29 @@ __all__ = [
 class NodeEncoder(nn.Module):
     def __init__(self, zs: Sequence[int]):
         super().__init__()
-        self.z_table = AtomicNumberTable(zs)
+        self.num_classes = len(zs)
+        self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.long))
 
     def forward(self, atomic_numbers):
-        # this uses one-hot encoding for the node attributes
-        indices = atomic_numbers_to_indices(atomic_numbers, z_table=self.z_table)
-        one_hot_encoding = to_one_hot(
-            torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
-            num_classes=len(self.z_table),
-            )
+        device = atomic_numbers.device
+
+        # Directly convert atomic numbers to indices using the precomputed map
+        indices = self.index_map[atomic_numbers]
+
+        # Handle out-of-range atomic numbers by setting indices to zero
+        indices[indices < 0] = 0
+
+        # Generate one-hot encoding
+        one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes)
         return one_hot_encoding
+
+    def to_one_hot(self, indices: torch.Tensor, num_classes: int) -> torch.Tensor:
+        shape = indices.shape[:-1] + (num_classes,)
+        oh = torch.zeros(shape, device=indices.device)
+
+        # scatter_ is the in-place version of scatter
+        oh.scatter_(dim=-1, index=indices, value=1)
+        return oh
 
 class NodeEmbedding(nn.Module):
     def __init__(self, node_dim:int, embedding_dim:int, trainable=True, random_seed=42):
@@ -53,14 +60,15 @@ class EdgeEncoder(nn.Module):
         self.directed = directed
 
     def forward(self, edge_tensor):
-        encoded_edges = []
-        for edge in edge_tensor:
-            node1, node2 = edge[:,0], edge[:,1]
-            if self.directed:
-                encoded_edge = torch.outer(node1, node2).flatten()
-            else:
-                node1, node2 = sorted([node1, node2], key=lambda x: str(x.tolist()))
-                # TODO: this can be reduced in dimension
-                encoded_edge = torch.outer(node1, node2).flatten()
-            encoded_edges.append(encoded_edge)
-        return torch.stack(encoded_edges, dim=0)
+        # Split the edge tensor into two parts for node1 and node2
+        node1, node2 = edge_tensor[:,:,0], edge_tensor[:,:,1]
+
+        if self.directed:
+            # Use batched torch.outer for directed edges
+            encoded_edges = torch.bmm(node1.unsqueeze(2), node2.unsqueeze(1)).flatten(start_dim=1)
+        else:
+            # Sort node1 and node2 along each edge for undirected edges
+            min_node, max_node = torch.min(node1, node2), torch.max(node1, node2)
+            encoded_edges = torch.bmm(min_node.unsqueeze(2), max_node.unsqueeze(1)).flatten(start_dim=1)
+
+        return encoded_edges

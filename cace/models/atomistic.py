@@ -1,7 +1,5 @@
 from typing import Dict, Optional, List
 
-# from schnetpack.transform import Transform 
-
 import torch
 import torch.nn as nn
 
@@ -166,20 +164,24 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_outputs()
 
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        #print("nnp forward")
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
+        #print("initialize_derivatives")
 
         for m in self.input_modules:
             data = m(data)
 
         data = self.representation(data)
+        #print("representation")
 
         for m in self.output_modules:
             data = m(data)
+        #print("output_modules")
 
         # apply postprocessing (if enabled)
         #data = self.postprocess(data)
 
-        results = self.extract_outputs(data)
+        #results = self.extract_outputs(data)
 
-        return results
+        return data #results

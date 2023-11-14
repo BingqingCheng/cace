@@ -3,7 +3,7 @@ from torch import nn
 from typing import Callable, Dict, Sequence
 from ..tools import elementwise_multiply_3tensors
 from ..tools import scatter_sum
-from ..modules import NodeEncoder, NodeEmbedding, AngularComponent
+from ..modules import NodeEncoder, NodeEmbedding, AngularComponent, AngularComponent_GPU
 from ..modules import get_edge_node_type, get_edge_vectors_and_lengths
 from ..modules import find_combo_vectors_nu2, find_combo_vectors_nu3, find_combo_vectors_nu4
 from ..modules import symmetrize_A_basis
@@ -22,6 +22,7 @@ class Cace(nn.Module):
         cutoff_fn: Callable,
         max_l: int,
         max_nu: int,
+        device: torch.device = torch.device("cpu")
     ):
         """
         Args:
@@ -49,7 +50,11 @@ class Cace(nn.Module):
         self.edge_coding = edge_coding
         self.radial_basis = radial_basis
         self.cutoff_fn = cutoff_fn
-        self.angular_basis = AngularComponent(self.max_l)
+        self.device = device
+        if self.device  == torch.device("cpu"):
+            self.angular_basis = AngularComponent(self.max_l)
+        else:
+            self.angular_basis = AngularComponent_GPU(self.max_l)
 
         if max_nu > 4:
             raise NotImplementedError("max_nu > 4 is not supported yet.")         
@@ -96,7 +101,7 @@ class Cace(nn.Module):
         radial_component = self.radial_basis(edge_lengths) * self.cutoff_fn(edge_lengths)
         angular_component = self.angular_basis(edge_vectors)
         l_list = self.angular_basis.get_lxlylz_list()
-        
+
         # combine
         edge_attri = elementwise_multiply_3tensors(
                       radial_component,
@@ -109,7 +114,7 @@ class Cace(nn.Module):
                                   index=data.edge_index[1], 
                                   dim=0, 
                                   dim_size=n_nodes)
-        
+ 
         # symmetrized B basis
         data["node_feat_B"] = symmetrize_A_basis(nu_max=self.max_nu, 
                                    vec_dict_allnu=self.vec_dict_allnu, 

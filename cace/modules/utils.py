@@ -1,6 +1,6 @@
 ###########################################################################################
 # Utilities
-# Authors: Ilyes Batatia, Gregor Simm and David Kovacs
+# modified from MACE
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
@@ -150,7 +150,8 @@ def get_edge_node_type(
     edge_index: torch.Tensor,  # [2, n_edges]
     node_type: torch.Tensor,  # [n_nodes, n_dims]
 ) -> torch.Tensor:
-    edge_type = torch.zeros([edge_index.shape[1], node_type.shape[1], 2])
+    edge_type = torch.zeros([edge_index.shape[1], node_type.shape[1], 2], 
+                           dtype=node_type.dtype, device=node_type.device)
     sender_type = node_type[edge_index[0]]
     receiver_type = node_type[edge_index[1]]
     edge_type[:, :, 0] = sender_type

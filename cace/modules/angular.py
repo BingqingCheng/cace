@@ -9,7 +9,12 @@ import torch.nn as nn
 from math import factorial
 from collections import OrderedDict
 
+__all__=['AngularComponent', 'AngularComponent_GPU', 'make_lxlylz_list', 'make_lxlylz', 'make_l_dict', 'l_dict_to_lxlylz_list', 'compute_length_lxlylz', 'compute_length_lmax', 'compute_length_lmax_numerical', 'lxlylz_factorial_coef', 'lxlylz_factorial_coef_torch']
+
 class AngularComponent(nn.Module):
+    """ Angular component of the edge basis functions 
+        This version runs faster on cpus but slower on gpus
+    """
     def __init__(self, l_max):
         super().__init__()
         self.l_max = l_max
@@ -21,23 +26,13 @@ class AngularComponent(nn.Module):
             raise TypeError("Input must be a torch.Tensor")
         if vectors.dim() != 2 or vectors.size(1) != 3:
             raise ValueError("Input tensor must have shape [N, 3]")
-        
+
         self.lxlylz_dict = OrderedDict({l: [] for l in range(self.l_max + 1)})
-        self.lxlylz_list = None
         N, _ = vectors.shape
         self.lxlylz_dict[0] = [[0, 0, 0]]
         computed_values = {(0, 0, 0): torch.ones(N, device=vectors.device)}
 
-        self._recursive_compute(self.l_max, vectors, computed_values)
-        self.lxlylz_list = self._convert_lxlylz_to_list()
-        computed_values_list = self._convert_computed_values_to_list(computed_values)
-        return computed_values_list
-
-    def _recursive_compute(self, l, vectors, computed_values):
-        if l == 0:
-            return
-        if not self.lxlylz_dict[l]:
-            self._recursive_compute(l - 1, vectors, computed_values)
+        for l in range(1, self.l_max + 1):
             for prev_lxlylz_combination in self.lxlylz_dict[l - 1]:
                 for i in range(3):
                     lxlylz_combination = prev_lxlylz_combination.copy()
@@ -47,18 +42,18 @@ class AngularComponent(nn.Module):
                         self.lxlylz_dict[l].append(lxlylz_combination)
                         computed_values[lxlylz_combination_tuple] = computed_values[tuple(prev_lxlylz_combination)] * vectors[:, i]
 
+        self.lxlylz_list = self._convert_lxlylz_to_list()
+        computed_values_list = self._convert_computed_values_to_list(computed_values)
+        return computed_values_list
+
     def _convert_lxlylz_to_list(self):
         lxlylz_list = []
         for l, combinations in self.lxlylz_dict.items():
-            for lxlylz_combination in combinations:
-                lxlylz_list.append(lxlylz_combination)
+            lxlylz_list.extend(combinations)
         return lxlylz_list
 
     def _convert_computed_values_to_list(self, computed_values):
-        computed_values_list = []
-        for l, combinations in self.lxlylz_dict.items():
-            for lxlylz_combination in combinations:
-                computed_values_list.append(computed_values[tuple(lxlylz_combination)])
+        computed_values_list = [computed_values[tuple(lxlylz_combination)] for lxlylz_combination in self.lxlylz_list]
         return torch.stack(computed_values_list, dim=1)
 
     def get_lxlylz_list(self):
@@ -70,30 +65,39 @@ class AngularComponent(nn.Module):
         return self.lxlylz_dict
 
 
-class AngularComponent_old(nn.Module):
-    """ Angular component of the edge basis functions """
-    def __init__(self, l_list: torch.Tensor):
+class AngularComponent_GPU(nn.Module):
+    """ Angular component of the edge basis functions 
+        This version runs faster on gpus but slower on cpus
+        The ordering of lxlylz_list is different from the CPU version
+    """
+    def __init__(self, l_max):
         super().__init__()
-        self.l_list = l_list
+        self.l_max = l_max
+        self.lxlylz_list = make_lxlylz_list(l_max)
 
-    def forward(self, vector_list: torch.Tensor):
-        computed_list = []
-        
-        for vector in vector_list:
-            x, y, z = vector
-            terms_list = []
-            
-            for l in self.l_list:
-                lx, ly, lz = l
-                term = (x ** lx) * (y ** ly) * (z ** lz)
-                terms_list.append(term)
-            
-            computed_list.append(torch.stack(terms_list))
-        
-        return torch.stack(computed_list)
+    def forward(self, vectors: torch.Tensor):
+        if not isinstance(vectors, torch.Tensor):
+            raise TypeError("Input must be a torch.Tensor")
+        if vectors.dim() != 2 or vectors.size(1) != 3:
+            raise ValueError("Input tensor must have shape [N, 3]")
 
-    def get_l_list(self):
-        return self.l_list
+        lxlylz_tensor = torch.tensor(self.lxlylz_list, device=vectors.device, dtype=vectors.dtype)
+
+        # Expand vectors and lxlylz_tensor for broadcasting
+        vectors_expanded = vectors[:, None, :]  # Shape: [N, 1, 3]
+        lxlylz_expanded = lxlylz_tensor[None, :, :]  # Shape: [1, M, 3]
+
+        # Compute terms using broadcasting
+        # Each vector component is raised to the power of corresponding lx, ly, lz
+        terms = vectors_expanded ** lxlylz_expanded  # Shape: [N, M, 3]
+
+        # Multiply across the last dimension (x^lx * y^ly * z^lz) for each term
+        computed_terms = torch.prod(terms, dim=-1)  # Shape: [N, M]
+
+        return computed_terms
+
+    def get_lxlylz_list(self):
+        return self.lxlylz_list
 
 def make_lxlylz_list(l_max: int):
     """
@@ -135,7 +139,7 @@ def l_dict_to_lxlylz_list(l_dict):
     lxlylz_list = []
     for l in l_dict:
         lxlylz_list += l_dict[l]
-    return torch.tensor(lxlylz_list)
+    return lxlylz_list
 
 def compute_length_lxlylz(l):
     """ compute the length of the lxlylz list based on l """
