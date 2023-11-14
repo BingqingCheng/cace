@@ -23,8 +23,6 @@ class AtomicData(torch_geometric.data.Data):
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
     n_atom_basis: torch.Tensor
-    edge_vectors: torch.Tensor
-    edge_lengths: torch.Tensor
     positions: torch.Tensor
     shifts: torch.Tensor
     unit_shifts: torch.Tensor
@@ -49,8 +47,6 @@ class AtomicData(torch_geometric.data.Data):
         positions: torch.Tensor,  # [n_nodes, 3]
         shifts: torch.Tensor,  # [n_edges, 3],
         unit_shifts: torch.Tensor,  # [n_edges, 3]
-        edge_vectors: torch.Tensor,  # [n_edges, 3]
-        edge_lengths: torch.Tensor,  # [n_edges, 1]
         cell: Optional[torch.Tensor],  # [3,3]
         weight: Optional[torch.Tensor],  # [,]
         energy_weight: Optional[torch.Tensor],  # [,]
@@ -89,8 +85,6 @@ class AtomicData(torch_geometric.data.Data):
             "positions": positions,
             "shifts": shifts,
             "unit_shifts": unit_shifts,
-            "edge_vectors": edge_vectors,
-            "edge_lengths": edge_lengths,
             "cell": cell,
             "atomic_numbers": atomic_numbers,
             "num_nodes": num_nodes,
@@ -113,8 +107,8 @@ class AtomicData(torch_geometric.data.Data):
         cls, config: Configuration, 
         cutoff: float, 
     ) -> "AtomicData":
-        edge_index, shifts, unit_shifts, edge_lengths, edge_vectors = get_neighborhood(
-            positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell, normalized_edge_vectors=True
+        edge_index, shifts, unit_shifts  = get_neighborhood(
+            positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
   
         atomic_numbers = torch.tensor(config.atomic_numbers, dtype=torch.long)
@@ -192,8 +186,6 @@ class AtomicData(torch_geometric.data.Data):
 
         return cls(
             edge_index=torch.tensor(edge_index, dtype=torch.long),
-            edge_vectors=torch.tensor(edge_vectors, dtype=torch.get_default_dtype()),
-            edge_lengths=torch.tensor(edge_lengths, dtype=torch.get_default_dtype()),
             positions=torch.tensor(config.positions, dtype=torch.get_default_dtype()),
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),

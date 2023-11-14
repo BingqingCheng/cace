@@ -16,8 +16,6 @@ def get_neighborhood(
     pbc: Optional[Tuple[bool, bool, bool]] = None,
     cell: Optional[np.ndarray] = None,  # [3, 3]
     true_self_interaction=False,
-    normalized_edge_vectors=True,
-    eps: float = 1e-9
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     if pbc is None:
         pbc = (False, False, False)
@@ -35,8 +33,8 @@ def get_neighborhood(
     ‘D’ : distance vector
     ‘S’ : shift vector (number of cell boundaries crossed by the bond between atom i and j). With the shift vector S, the distances D between atoms can be computed from: D = positions[j]-positions[i]+S.dot(cell)
     """
-    sender, receiver, unit_shifts, distance, distance_vector = ase.neighborlist.primitive_neighbor_list(
-        quantities="ijSdD",
+    sender, receiver, unit_shifts = ase.neighborlist.primitive_neighbor_list(
+        quantities="ijS",
         pbc=pbc,
         cell=cell,
         positions=positions,
@@ -55,8 +53,6 @@ def get_neighborhood(
         sender = sender[keep_edge]
         receiver = receiver[keep_edge]
         unit_shifts = unit_shifts[keep_edge]
-        distance = distance[keep_edge]
-        distance_vector = distance_vector[keep_edge]
 
     # Build output
     edge_index = np.stack((sender, receiver))  # [2, n_edges]
@@ -65,11 +61,5 @@ def get_neighborhood(
     # D = positions[j]-positions[i]+S.dot(cell)
     shifts = np.dot(unit_shifts, cell)  # [n_edges, 3]
 
-    distance = distance[:, np.newaxis]  # [n_edges, 1]   
-    if normalized_edge_vectors:
-        # Normalize edge vectors
-        distance_vector_norm = distance_vector / (distance + eps)
-        return edge_index, shifts, unit_shifts, distance, distance_vector_norm
-    else:
-        # sender = edge_index[0] receiver = edge_index[1]
-        return edge_index, shifts, unit_shifts, distance, distance_vector 
+    # sender = edge_index[0] receiver = edge_index[1]
+    return edge_index, shifts, unit_shifts

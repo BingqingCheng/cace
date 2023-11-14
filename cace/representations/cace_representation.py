@@ -4,7 +4,7 @@ from typing import Callable, Dict, Sequence
 from ..tools import elementwise_multiply_3tensors
 from ..tools import scatter_sum
 from ..modules import NodeEncoder, NodeEmbedding, AngularComponent, AngularComponent_GPU
-from ..modules import get_edge_node_type 
+from ..modules import get_edge_node_type, get_edge_vectors_and_lengths
 from ..modules import find_combo_vectors_nu2, find_combo_vectors_nu3, find_combo_vectors_nu4
 from ..modules import Symmetrizer #symmetrize_A_basis
 
@@ -93,8 +93,14 @@ class Cace(nn.Module):
         encoded_edges = self.edge_coding(edge_type)
         
         # compute angular and radial terms
-        radial_component = self.radial_basis(data["edge_lengths"]) * self.cutoff_fn(data["edge_lengths"])
-        angular_component = self.angular_basis(data["edge_vectors"])
+        edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
+            positions=data["positions"],
+            edge_index=data["edge_index"],
+            shifts=data["shifts"],
+            normalize=True,
+            )
+        radial_component = self.radial_basis(edge_lengths) * self.cutoff_fn(edge_lengths)
+        angular_component = self.angular_basis(edge_vectors)
 
         if self.l_list == None:
             self.l_list = self.angular_basis.get_lxlylz_list()
