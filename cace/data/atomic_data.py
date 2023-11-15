@@ -23,8 +23,6 @@ class AtomicData(torch_geometric.data.Data):
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
     n_atom_basis: torch.Tensor
-    edge_vectors: torch.Tensor
-    edge_lengths: torch.Tensor
     positions: torch.Tensor
     shifts: torch.Tensor
     unit_shifts: torch.Tensor
@@ -109,7 +107,7 @@ class AtomicData(torch_geometric.data.Data):
         cls, config: Configuration, 
         cutoff: float, 
     ) -> "AtomicData":
-        edge_index, shifts, unit_shifts = get_neighborhood(
+        edge_index, shifts, unit_shifts  = get_neighborhood(
             positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
         )
   

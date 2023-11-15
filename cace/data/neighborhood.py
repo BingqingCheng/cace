@@ -61,5 +61,5 @@ def get_neighborhood(
     # D = positions[j]-positions[i]+S.dot(cell)
     shifts = np.dot(unit_shifts, cell)  # [n_edges, 3]
 
-   # sender = edge_index[0] receiver = edge_index[1]
-    return edge_index, shifts, unit_shifts 
+    # sender = edge_index[0] receiver = edge_index[1]
+    return edge_index, shifts, unit_shifts

@@ -6,7 +6,7 @@ from ..tools import scatter_sum
 from ..modules import NodeEncoder, NodeEmbedding, AngularComponent, AngularComponent_GPU
 from ..modules import get_edge_node_type, get_edge_vectors_and_lengths
 from ..modules import find_combo_vectors_nu2, find_combo_vectors_nu3, find_combo_vectors_nu4
-from ..modules import symmetrize_A_basis
+from ..modules import Symmetrizer #symmetrize_A_basis
 
 __all__ = ["Cace"]
 
@@ -63,6 +63,9 @@ class Cace(nn.Module):
         self.vec_dict_allnu[3], _, _  = find_combo_vectors_nu3(self.max_l)
         self.vec_dict_allnu[4], _, _  = find_combo_vectors_nu4(self.max_l)
 
+        self.l_list = None
+        self.symmetrizer = None
+
     def forward(
         self, 
         data: Dict[str, torch.Tensor]
@@ -89,18 +92,18 @@ class Cace(nn.Module):
                               node_type=node_embedded)
         encoded_edges = self.edge_coding(edge_type)
         
-        ## compute displacements
-        edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
-                   positions=data["positions"],
-                   edge_index=data["edge_index"],
-                   shifts=data["shifts"],
-                   normalize=True
-                   )
-        
         # compute angular and radial terms
+        edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
+            positions=data["positions"],
+            edge_index=data["edge_index"],
+            shifts=data["shifts"],
+            normalize=True,
+            )
         radial_component = self.radial_basis(edge_lengths) * self.cutoff_fn(edge_lengths)
         angular_component = self.angular_basis(edge_vectors)
-        l_list = self.angular_basis.get_lxlylz_list()
+
+        if self.l_list == None:
+            self.l_list = self.angular_basis.get_lxlylz_list()
 
         # combine
         edge_attri = elementwise_multiply_3tensors(
@@ -114,10 +117,10 @@ class Cace(nn.Module):
                                   index=data.edge_index[1], 
                                   dim=0, 
                                   dim_size=n_nodes)
- 
+
         # symmetrized B basis
-        data["node_feat_B"] = symmetrize_A_basis(nu_max=self.max_nu, 
-                                   vec_dict_allnu=self.vec_dict_allnu, 
-                                   node_attr=data["node_feat_A"],
-                                   l_list=l_list)
+        if self.symmetrizer == None:
+            self.symmetrizer = Symmetrizer(self.max_nu, self.vec_dict_allnu, self.l_list)
+        data["node_feat_B"] = self.symmetrizer.symmetrize_A_basis(node_attr=data["node_feat_A"])
+
         return data
