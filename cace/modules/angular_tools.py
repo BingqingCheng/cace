@@ -58,7 +58,7 @@ def find_combo_vectors_nu3(l_max):
                 if (lx1 + ly1 + lz1) <= (lx2 + ly2 + lz2) <= l_max:
                     lx3, ly3, lz3 = lx1 + lx2, ly1 + ly2, lz1 + lz2
                     if (lx3 + ly3 + lz3) <= l_max:
-                        if ([lx2, ly2, lz2], [lx1, ly1, lz1], [lx3, ly3, lz3]) not in vector_groups:
+                        if ([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3]) not in vector_groups:
                             vector_groups.append(([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3]))
                             prefactor = lxlylz_factorial_coef([lx1, ly1, lz1])*lxlylz_factorial_coef([lx2, ly2, lz2])
                             prefactors.append(prefactor)
