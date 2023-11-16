@@ -182,6 +182,6 @@ class NeuralNetworkPotential(AtomisticModel):
         # apply postprocessing (if enabled)
         #data = self.postprocess(data)
 
-        #results = self.extract_outputs(data)
+        results = self.extract_outputs(data)
 
-        return data #results
+        return results

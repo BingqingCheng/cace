@@ -8,16 +8,24 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = ["BesselRBF", "GaussianRBF", "GaussianRBFCentered", "BesselRBF_SchNet"]
+__all__ = ["BesselRBF", "GaussianRBF", "GaussianRBFCentered"]
 
 class BesselRBF(nn.Module):
     """
-    Klicpera, J.; Groß, J.; Günnemann, S. Directional Message Passing for Molecular Graphs; ICLR 2020.
+    Sine for radial basis functions with coulomb decay (0th order bessel).
+
+    References:
+
+    .. [#dimenet] Klicpera, Groß, Günnemann:
+       Directional message passing for molecular graphs.
+       ICLR 2020
     Equation (7)
     """
 
     def __init__(self, cutoff: float, n_rbf=8, trainable=False):
         super().__init__()
+
+        self.n_rbf = n_rbf
 
         bessel_weights = (
             np.pi
@@ -42,9 +50,9 @@ class BesselRBF(nn.Module):
             torch.tensor(np.sqrt(2.0 / cutoff), dtype=torch.get_default_dtype()),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [..., 1]
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [...,1]
         numerator = torch.sin(self.bessel_weights * x)  # [..., n_rbf]
-        return self.prefactor * (numerator / x)
+        return self.prefactor * (numerator / x)  # [..., n_rbf]
 
     def __repr__(self):
         return (
@@ -55,7 +63,7 @@ class BesselRBF(nn.Module):
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
     coeff = -0.5 / torch.pow(widths, 2)
-    diff = inputs[..., None] - offsets
+    diff = inputs - offsets
     y = torch.exp(coeff * torch.pow(diff, 2))
     return y
 
@@ -82,6 +90,11 @@ class GaussianRBF(nn.Module):
         widths = torch.FloatTensor(
             torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         )
+
+        self.register_buffer(
+            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
+        )
+
         if trainable:
             self.widths = nn.Parameter(widths)
             self.offsets = nn.Parameter(offset)
@@ -94,7 +107,7 @@ class GaussianRBF(nn.Module):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(cutoff={self.cutoff}, n_rbf={self.rbf}, "
+            f"{self.__class__.__name__}(cutoff={self.cutoff}, n_rbf={self.n_rbf}, "
             f"trainable={self.widths.requires_grad})"
         )
 
@@ -118,6 +131,11 @@ class GaussianRBFCentered(nn.Module):
         # compute offset and width of Gaussian functions
         widths = torch.linspace(start, cutoff, n_rbf)
         offset = torch.zeros_like(widths)
+
+        self.register_buffer(
+            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
+        )
+
         if trainable:
             self.widths = nn.Parameter(widths)
             self.offsets = nn.Parameter(offset)
@@ -130,36 +148,6 @@ class GaussianRBFCentered(nn.Module):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(cutoff={self.cutoff}, n_rbf={self.rbf}, "
+            f"{self.__class__.__name__}(cutoff={self.cutoff}, n_rbf={self.n_rbf}, "
             f"trainable={self.widths.requires_grad})"
         )
-
-class BesselRBF_SchNet(nn.Module):
-    """
-    Sine for radial basis functions with coulomb decay (0th order bessel).
-
-    References:
-
-    .. [#dimenet] Klicpera, Groß, Günnemann:
-       Directional message passing for molecular graphs.
-       ICLR 2020
-    """
-
-    def __init__(self, n_rbf: int, cutoff: float):
-        """
-        Args:
-            cutoff: radial cutoff
-            n_rbf: number of basis functions.
-        """
-        super().__init__()
-        self.n_rbf = n_rbf
-
-        freqs = torch.arange(1, n_rbf + 1) * np.pi / cutoff
-        self.register_buffer("freqs", freqs)
-
-    def forward(self, inputs):
-        ax = inputs[..., None] * self.freqs
-        sinax = torch.sin(ax)
-        norm = torch.where(inputs == 0, torch.tensor(1.0, device=inputs.device), inputs)
-        y = sinax / norm[..., None]
-        return y

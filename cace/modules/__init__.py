@@ -8,6 +8,8 @@ from .cutoff import *
 
 from .radial import *
 
+from .radial_transform import *
+
 from .type import *
 
 from .utils import *

@@ -76,6 +76,7 @@ def config_from_atoms_list(
     dipole_key="dipole",
     charges_key="charges",
     config_type_weights: Dict[str, float] = None,
+    atomic_energies: Dict[int, float] = None
 ) -> Configurations:
     """Convert list of ase.Atoms into Configurations"""
     if config_type_weights is None:
@@ -93,6 +94,7 @@ def config_from_atoms_list(
                 dipole_key=dipole_key,
                 charges_key=charges_key,
                 config_type_weights=config_type_weights,
+                atomic_energies=atomic_energies
             )
         )
     return all_configs
@@ -107,21 +109,23 @@ def config_from_atoms(
     dipole_key="dipole",
     charges_key="charges",
     config_type_weights: Dict[str, float] = None,
+    atomic_energies: Dict[int, float] = None
 ) -> Configuration:
     """Convert ase.Atoms to Configuration"""
     if config_type_weights is None:
         config_type_weights = DEFAULT_CONFIG_TYPE_WEIGHTS
 
+    atomic_numbers = atoms.get_atomic_numbers()
     energy = atoms.info.get(energy_key, None)  # eV
+    # subtract atomic energies if available
+    if atomic_energies and energy is not None:
+        energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
     stress = atoms.info.get(stress_key, None)  # eV / Ang
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
     # Charges default to 0 instead of None if not found
     charges = atoms.arrays.get(charges_key, np.zeros(len(atoms)))  # atomic unit
-    atomic_numbers = np.array(
-        [ase.data.atomic_numbers[symbol] for symbol in atoms.symbols]
-    )
     pbc = tuple(atoms.get_pbc())
     cell = np.array(atoms.get_cell())
     config_type = atoms.info.get("config_type", "Default")
@@ -167,22 +171,6 @@ def config_from_atoms(
     )
 
 
-def test_config_types(
-    test_configs: Configurations,
-) -> List[Tuple[Optional[str], List[Configuration]]]:
-    """Split test set based on config_type-s"""
-    test_by_ct = []
-    all_cts = []
-    for conf in test_configs:
-        if conf.config_type not in all_cts:
-            all_cts.append(conf.config_type)
-            test_by_ct.append((conf.config_type, [conf]))
-        else:
-            ind = all_cts.index(conf.config_type)
-            test_by_ct[ind][1].append(conf)
-    return test_by_ct
-
-
 def load_from_xyz(
     file_path: str,
     config_type_weights: Dict,
@@ -192,35 +180,12 @@ def load_from_xyz(
     virials_key: str = "virials",
     dipole_key: str = "dipole",
     charges_key: str = "charges",
-    extract_atomic_energies: bool = False,
+    atomic_energies: Dict[int, float] = None
 ) -> Tuple[Dict[int, float], Configurations]:
     atoms_list = ase.io.read(file_path, index=":")
 
     if not isinstance(atoms_list, list):
         atoms_list = [atoms_list]
-
-    atomic_energies_dict = {}
-    if extract_atomic_energies:
-        atoms_without_iso_atoms = []
-
-        for idx, atoms in enumerate(atoms_list):
-            if len(atoms) == 1 and atoms.info["config_type"] == "IsolatedAtom":
-                if energy_key in atoms.info.keys():
-                    atomic_energies_dict[atoms.get_atomic_numbers()[0]] = atoms.info[
-                        energy_key
-                    ]
-                else:
-                    logging.warning(
-                        f"Configuration '{idx}' is marked as 'IsolatedAtom' "
-                        "but does not contain an energy."
-                    )
-            else:
-                atoms_without_iso_atoms.append(atoms)
-
-        if len(atomic_energies_dict) > 0:
-            logging.info("Using isolated atom energies from training file")
-
-        atoms_list = atoms_without_iso_atoms
 
     configs = config_from_atoms_list(
         atoms_list,
@@ -231,5 +196,6 @@ def load_from_xyz(
         virials_key=virials_key,
         dipole_key=dipole_key,
         charges_key=charges_key,
+        atomic_energies=atomic_energies
     )
-    return atomic_energies_dict, configs
+    return configs

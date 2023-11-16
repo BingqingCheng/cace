@@ -73,7 +73,8 @@ class AngularComponent_GPU(nn.Module):
     def __init__(self, l_max):
         super().__init__()
         self.l_max = l_max
-        self.lxlylz_list = make_lxlylz_list(l_max)
+        self.lxlylz_dict = make_l_dict(l_max)
+        self.lxlylz_list = l_dict_to_lxlylz_list(self.lxlylz_dict)
 
     def forward(self, vectors: torch.Tensor):
         if not isinstance(vectors, torch.Tensor):
@@ -98,6 +99,9 @@ class AngularComponent_GPU(nn.Module):
 
     def get_lxlylz_list(self):
         return self.lxlylz_list
+
+    def get_lxlylz_dict(self):
+        return self.lxlylz_dict
 
 def make_lxlylz_list(l_max: int):
     """

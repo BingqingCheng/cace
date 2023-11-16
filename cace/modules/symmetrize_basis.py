@@ -3,6 +3,11 @@ import numpy as np
 
 __all__ = ['Symmetrizer']
 
+"""
+This class is used to symmetrize the basis functions in the A basis.
+The basis functions are symmetrized by taking the product of the basis functions
+"""
+
 class Symmetrizer:
     def __init__(self, nu_max: int, vec_dict_allnu: dict, l_list: list):
         if nu_max >= 5:
@@ -32,7 +37,7 @@ class Symmetrizer:
                 for item in lxlylz_list:
                     prefactor = item[-1]
                     indices = [self.l_list_indices[tuple(lxlylz)] for lxlylz in item[:-1]]
-                    product = torch.prod(node_attr[:, :, indices, :], dim=2) if nu > 2 else node_attr[:, :, indices[0], :] ** 2
+                    product = torch.prod(node_attr[:, :, indices, :], dim=2)
                     sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
             n_sym_node_attr += len(vec_dict)
 

@@ -7,7 +7,6 @@ from .utils import (
     config_from_atoms_list,
     load_from_xyz,
     random_train_valid_split,
-    test_config_types,
 )
 
 __all__ = [
@@ -16,7 +15,6 @@ __all__ = [
     "Configurations",
     "random_train_valid_split",
     "load_from_xyz",
-    "test_config_types",
     "config_from_atoms",
     "config_from_atoms_list",
     "AtomicData",

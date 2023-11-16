@@ -17,7 +17,6 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
-        n_in: int,
         n_out: int = 1,
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
@@ -54,19 +53,33 @@ class Atomwise(nn.Module):
                 + " since no accumulated output will be returned!"
             )
 
-        self.outnet = build_mlp(
-            n_in=n_in,
-            n_out=n_out,
-            n_hidden=n_hidden,
-            n_layers=n_layers,
-            activation=activation,
-        )
+        self.outnet = None
+        self.n_out = n_out
+        self.n_hidden = n_hidden
+        self.n_layers = n_layers
+        self.activation = activation
         self.aggregation_mode = aggregation_mode
+        self.n_in = None
 
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feat_B']
         features = features.reshape(features.shape[0], -1)
+        if self.n_in is None:
+            self.n_in = features.shape[1]
+        else:
+            assert self.n_in == features.shape[1]
+
+        if self.outnet == None:
+            self.outnet = build_mlp(
+                n_in=self.n_in,
+                n_out=self.n_out,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                )
+            self.outnet = self.outnet.to(features.device)
+
         # predict atomwise contributions
         y = self.outnet(features)
 

@@ -42,7 +42,7 @@ def find_combo_vectors_nu2(l_max):
             vector_groups.append(lxlylz_now)
             prefactors.append(prefactor)
             key = L
-            vec_dict[key] = vec_dict.get(key, []) + [(lxlylz_now, prefactor)]
+            vec_dict[key] = vec_dict.get(key, []) + [(lxlylz_now, lxlylz_now, prefactor)]
     return vec_dict, vector_groups, prefactors
 
 def find_combo_vectors_nu3(l_max):
