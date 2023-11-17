@@ -17,6 +17,7 @@ class Atomwise(nn.Module):
 
     def __init__(
         self,
+        n_in: Optional[int] = None,
         n_out: int = 1,
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
@@ -53,18 +54,34 @@ class Atomwise(nn.Module):
                 + " since no accumulated output will be returned!"
             )
 
-        self.outnet = None
+        self.n_in = n_in
         self.n_out = n_out
         self.n_hidden = n_hidden
         self.n_layers = n_layers
         self.activation = activation
         self.aggregation_mode = aggregation_mode
-        self.n_in = None
+
+        if n_in is not None:
+            self.outnet = build_mlp(
+                n_in=self.n_in,
+                n_out=self.n_out,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                )
+            #self.outnet = self.outnet.to(features.device)
+            #print("built self.outnet")
+        else:
+            self.outnet = None
 
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    #def forward(self, features: torch.Tensor) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
+        #print(data["batch"])
         features = data['node_feat_B']
+        #print("get data")
         features = features.reshape(features.shape[0], -1)
+        #print("read features")
         if self.n_in is None:
             self.n_in = features.shape[1]
         else:
@@ -79,9 +96,11 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 )
             self.outnet = self.outnet.to(features.device)
+            print("built self.outnet")
 
         # predict atomwise contributions
         y = self.outnet(features)
+        #print("predicted y")
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:

@@ -51,7 +51,7 @@ class Forces(nn.Module):
 
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         forces, virials, stress = get_outputs(
-            energy=data.CACE_energy,
+            energy=data[self.energy_key],
             positions=data['positions'],
             training=self.training,
             compute_force=self.calc_forces,

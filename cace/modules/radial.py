@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-__all__ = ["BesselRBF", "GaussianRBF", "GaussianRBFCentered"]
+__all__ = ["BesselRBF", "GaussianRBF", "GaussianRBFCentered", "ExponentialDecayRBF"]
 
 class BesselRBF(nn.Module):
     """
@@ -60,6 +60,44 @@ class BesselRBF(nn.Module):
             f"trainable={self.bessel_weights.requires_grad})"
         )
 
+
+class ExponentialDecayRBF(nn.Module):
+    """Exponential decay radial basis functions.
+       y  = prefactor * exp(-x / r0)
+    """
+    def __init__(
+        self, n_rbf: int, cutoff: float, prefactor: torch.tensor=torch.tensor(1.0), trainable: bool = False
+    ):
+        super().__init__()
+        self.n_rbf = n_rbf
+
+        # Convert prefactor to a tensor if it's not already one
+        if not isinstance(prefactor, torch.Tensor):
+            prefactor = torch.tensor(prefactor, dtype=torch.get_default_dtype())
+
+        if n_rbf == 1:
+             r0 = torch.tensor(cutoff / 2.0)
+        else:
+            # compute offset and width of Gaussian functions
+            r0 = torch.linspace(0, cutoff, n_rbf + 2) [1:-1]
+
+        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype()))
+
+        if trainable:
+            self.r0 = nn.Parameter(r0)
+            self.prefactor = nn.Parameter(prefactor)
+        else:
+            self.register_buffer("r0", r0)
+            self.register_buffer("prefactor", torch.tensor(prefactor, dtype=torch.get_default_dtype()))
+
+    def forward(self, inputs: torch.Tensor):
+        return self.prefactor * torch.exp(-inputs / self.r0)
+
+    def __repr__(self):
+        return (
+	    f"{self.__class__.__name__}(prefactor={self.prefactor}, r0={self.r0},"
+	    f"trainable={self.r0.requires_grad})"
+	)
 
 def gaussian_rbf(inputs: torch.Tensor, offsets: torch.Tensor, widths: torch.Tensor):
     coeff = -0.5 / torch.pow(widths, 2)

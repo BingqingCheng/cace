@@ -3,17 +3,24 @@ import torch.nn as nn
 import numpy as np
 
 class SharedRadialLinearTransform(nn.Module):
-    def __init__(self, max_l: int, radial_dim: int):
+    def __init__(self, max_l: int, radial_dim: int, random_init = False):
         super().__init__()
         self.max_l = max_l
         self.radial_dim = radial_dim
         self.angular_dim_groups = self._init_angular_dim_groups(max_l)
+        self.random_init = random_init
         self.weights = self._initialize_weights(radial_dim)
 
     def _initialize_weights(self, radial_dim: int):
-        return nn.ParameterList([
-            nn.Parameter(torch.eye(radial_dim)) for _ in self.angular_dim_groups 
-        ])
+        if self.random_init:
+            return nn.ParameterList([
+                nn.Parameter(torch.rand([radial_dim, radial_dim])) for _ in self.angular_dim_groups
+            ])
+        else:
+            # identity
+            return nn.ParameterList([
+                nn.Parameter(torch.eye(radial_dim)) for _ in self.angular_dim_groups
+            ])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 

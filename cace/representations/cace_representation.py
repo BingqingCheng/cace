@@ -7,6 +7,7 @@ from ..tools import elementwise_multiply_3tensors, scatter_sum
 from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
+    ExponentialDecayRBF,
     AngularComponent, 
     AngularComponent_GPU,
     SharedRadialLinearTransform,
@@ -34,6 +35,7 @@ class Cace(nn.Module):
         cutoff_fn: Callable,
         max_l: int,
         max_nu: int,
+        num_message_passing: int,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
     ):
@@ -68,6 +70,13 @@ class Cace(nn.Module):
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial
                                 )
+
+        # for message passing layers
+        self.num_message_passing = num_message_passing
+        self.message_radial = nn.ModuleList() # list of MP radial basis functions
+        for i in range(num_message_passing):
+            self.message_radial.append(ExponentialDecayRBF(n_rbf=1, cutoff=cutoff, trainable=True))
+
         self.device = device
         if self.device  == torch.device("cpu"):
             self.angular_basis = AngularComponent(self.max_l)
@@ -100,6 +109,8 @@ class Cace(nn.Module):
         except:
             num_graphs = 1
 
+        node_feats_list = []
+
         # Embeddings
         ## code each node/element in one-hot way
         # add timing to each step of the forward pass
@@ -130,7 +141,8 @@ class Cace(nn.Module):
         t4 = time.time()
         if self.timeit: print("edge_vectors time: {}".format(t4-t3))
 
-        radial_component = self.radial_basis(edge_lengths) * self.cutoff_fn(edge_lengths)
+        radial_component = self.radial_basis(edge_lengths) 
+        radial_cutoff = self.cutoff_fn(edge_lengths)
         angular_component = self.angular_basis(edge_vectors)
         t5 = time.time()
         if self.timeit: print("radial and angular component time: {}".format(t5-t4))
@@ -141,7 +153,7 @@ class Cace(nn.Module):
         # combine
         # 4-dimensional tensor: [n_edges, radial_dim, angular_dim, embedding_dim]
         edge_attri = elementwise_multiply_3tensors(
-                      radial_component,
+                      radial_component * radial_cutoff,
                       angular_component,
                       encoded_edges
         )
@@ -159,14 +171,35 @@ class Cace(nn.Module):
                                   index=data.edge_index[1], 
                                   dim=0, 
                                   dim_size=n_nodes)
+        #data["node_feat_A"] = node_feat_A # for debugging
+
         t8 = time.time()
         if self.timeit: print("scatter_sum time: {}".format(t8-t7))
 
         # symmetrized B basis
         if self.symmetrizer == None:
             self.symmetrizer = Symmetrizer(self.max_nu, self.vec_dict_allnu, self.l_list)
-        data["node_feat_B"] = self.symmetrizer.symmetrize_A_basis(node_attr=node_feat_A)
+        node_feat_B = self.symmetrizer.symmetrize_A_basis(node_attr=node_feat_A)
+        node_feats_list.append(node_feat_B)
+
         t9 = time.time()
         if self.timeit: print("symmetrizer time: {}".format(t9-t8))
+
+        # message passing
+        for mp_r in self.message_radial:
+            t_mp_start = time.time()
+            sender_features = node_feat_A[data.edge_index[0]]
+            radial_decay = mp_r(edge_lengths)
+            message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
+            node_feat_A = node_feat_A + scatter_sum(src=message,
+                                    index=data.edge_index[1],
+                                    dim=0,
+                                    dim_size=n_nodes)
+            node_feat_B = self.symmetrizer.symmetrize_A_basis(node_attr=node_feat_A)
+            node_feats_list.append(node_feat_B)
+            t_mp_end = time.time()
+            if self.timeit: print("message passing time: {}".format(t_mp_end-t_mp_start))
+
+        data['node_feat_B'] = torch.stack(node_feats_list, dim=-1)
 
         return data
