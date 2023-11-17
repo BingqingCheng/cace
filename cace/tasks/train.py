@@ -19,7 +19,8 @@ class TrainingTask(nn.Module):
                 optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
                 optimizer_args: Optional[Dict[str, Any]] = None,
                 scheduler_cls: Optional[Type] = None,
-                scheduler_args: Optional[Dict[str, Any]] = None
+                scheduler_args: Optional[Dict[str, Any]] = None,
+                max_grad_norm: float = 10,
                 ):
         """
         Args:
@@ -36,7 +37,8 @@ class TrainingTask(nn.Module):
         self.losses = nn.ModuleList(losses)
         self.optimizer = optimizer_cls(self.parameters(), **optimizer_args)
         self.scheduler = scheduler_cls(self.optimizer, **scheduler_args) if scheduler_cls else None
-        
+        self.max_grad_norm = max_grad_norm
+
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
     def forward(self, data):
@@ -68,6 +70,8 @@ class TrainingTask(nn.Module):
         pred = self.forward(batch)
         loss = self.loss_fn(pred, batch)
         loss.backward()
+        if self.max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
         self.optimizer.step()
         if self.scheduler:
             self.scheduler.step()
