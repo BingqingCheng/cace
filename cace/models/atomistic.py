@@ -3,6 +3,8 @@ from typing import Dict, Optional, List
 import torch
 import torch.nn as nn
 
+from ..modules import Transform
+
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
 
@@ -54,9 +56,9 @@ class AtomisticModel(nn.Module):
 
     def __init__(
         self,
-        #postprocessors: Optional[List[Transform]] = None,
         #input_dtype_str: str = "float32",
-        #do_postprocessing: bool = True,
+        postprocessors: Optional[List[Transform]] = None,
+        do_postprocessing: bool = False,
     ):
         """
         Args:
@@ -68,8 +70,8 @@ class AtomisticModel(nn.Module):
         """
         super().__init__()
         #self.input_dtype_str = input_dtype_str
-        #self.do_postprocessing = do_postprocessing
-        #self.postprocessors = nn.ModuleList(postprocessors)
+        self.do_postprocessing = do_postprocessing
+        self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
         self.model_outputs: Optional[List[str]] = None
 
@@ -102,17 +104,17 @@ class AtomisticModel(nn.Module):
                 data[p].requires_grad_(True)
         return data
 
-    #def initialize_transforms(self, datamodule):
-    #    for module in self.modules():
-    #        if isinstance(module, Transform):
-    #            module.datamodule(datamodule)
+    def initialize_transforms(self, datamodule):
+        for module in self.modules():
+            if isinstance(module, Transform):
+                module.datamodule(datamodule)
 
-    #def postprocess(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    #    if self.do_postprocessing:
-    #        # apply postprocessing
-    #        for pp in self.postprocessors:
-    #            data = pp(data)
-    #    return data
+    def postprocess(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        if self.do_postprocessing:
+            # apply postprocessing
+            for pp in self.postprocessors:
+                data = pp(data)
+        return data
 
     def extract_outputs(
         self, data: Dict[str, torch.Tensor]
@@ -135,9 +137,9 @@ class NeuralNetworkPotential(AtomisticModel):
         representation: nn.Module,
         input_modules: List[nn.Module] = None,
         output_modules: List[nn.Module] = None,
-        #postprocessors: Optional[List[Transform]] = None,
         #input_dtype_str: str = "float32",
-        #do_postprocessing: bool = True,
+        postprocessors: Optional[List[Transform]] = None,
+        do_postprocessing: bool = False,
     ):
         """
         Args:
@@ -153,8 +155,8 @@ class NeuralNetworkPotential(AtomisticModel):
         """
         super().__init__(
             #input_dtype_str=input_dtype_str,
-            #postprocessors=postprocessors,
-            #do_postprocessing=do_postprocessing,
+            postprocessors=postprocessors,
+            do_postprocessing=do_postprocessing,
         )
         self.representation = representation
         self.input_modules = nn.ModuleList(input_modules)
@@ -180,7 +182,7 @@ class NeuralNetworkPotential(AtomisticModel):
         #print("output_modules")
 
         # apply postprocessing (if enabled)
-        #data = self.postprocess(data)
+        data = self.postprocess(data)
 
         results = self.extract_outputs(data)
 

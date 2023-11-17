@@ -6,7 +6,8 @@
 
 from typing import Optional, Sequence
 
-import torch_geometric
+#import torch_geometric
+from ..tools import torch_geometric
 import torch.nn as nn
 import torch.utils.data
 from ..tools import voigt_to_matrix

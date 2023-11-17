@@ -8,3 +8,5 @@ from .torch_tools import (
 
 
 from .scatter import scatter_sum
+
+from .metric import *

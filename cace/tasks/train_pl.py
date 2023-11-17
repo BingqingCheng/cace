@@ -50,7 +50,7 @@ class TrainingTask_PL(pl.LightningModule):
         self.grad_enabled = len(self.model.required_derivatives) > 0
         self.lr = optimizer_args["lr"]
         self.warmup_steps = warmup_steps
-        self.save_hyperparameters()
+        #self.save_hyperparameters()
 
     def forward(self, data: Dict[str, torch.Tensor]):
         data = self.model(data)
@@ -136,10 +136,9 @@ class TrainingTask_PL(pl.LightningModule):
                 pg["lr"] = lr_scale * self.lr
 
         # update params
-        if optimizer_closure is not None:
-            optimizer.step(closure=optimizer_closure)
-        else:
-            optimizer.step()
+        optimizer_closure()
+        #optimizer.step(closure=optimizer_closure)
+        optimizer.step()
 
     def save_model(self, path: str):
         torch.save(self.model, path)

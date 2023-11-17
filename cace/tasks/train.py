@@ -49,6 +49,18 @@ class TrainingTask(nn.Module):
             loss += eachloss.calculate_loss(pred, batch)
         return loss
 
+    def log_metrics(self, subset, pred, batch):
+        for eachloss in self.losses:
+            eachloss.update_metrics(subset, pred, batch)
+
+    def retrieve_metrics(self, subset):
+        for eachloss in self.losses:
+            for metric_name, metric in eachloss.metrics[subset].items():
+                print(
+                    f"{subset}_{eachloss.name}_{metric_name}",
+                    torch.mean(torch.stack(metric))
+                )
+
     def train_step(self, batch):
         batch.to(self.device)
         self.train()
@@ -59,6 +71,7 @@ class TrainingTask(nn.Module):
         self.optimizer.step()
         if self.scheduler:
             self.scheduler.step()
+        #self.log_metrics('train', pred, batch)
         return loss.item()
 
     def validate(self, val_loader):
@@ -71,6 +84,7 @@ class TrainingTask(nn.Module):
             pred = self.forward(batch)
             loss = self.loss_fn(pred, batch)
             total_loss += loss.item()
+            self.log_metrics('val', pred, batch)
         return total_loss / len(val_loader)
 
     def fit(self, train_loader, val_loader, epochs):
@@ -80,7 +94,10 @@ class TrainingTask(nn.Module):
                 loss = self.train_step(batch)
                 total_loss += loss
             avg_loss = total_loss / len(train_loader)
+            #self.retrieve_metrics('train')
+
             val_loss = self.validate(val_loader)
+            self.retrieve_metrics('val')
             print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
 
     def save_model(self, path: str):

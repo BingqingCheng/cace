@@ -69,7 +69,7 @@ class Atomwise(nn.Module):
                 n_layers=self.n_layers,
                 activation=self.activation,
                 )
-            #self.outnet = self.outnet.to(features.device)
+            self.outnet = self.outnet.to(features.device)
             #print("built self.outnet")
         else:
             self.outnet = None
@@ -96,7 +96,7 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 )
             self.outnet = self.outnet.to(features.device)
-            print("built self.outnet")
+            #print("built self.outnet")
 
         # predict atomwise contributions
         y = self.outnet(features)
