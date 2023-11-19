@@ -15,6 +15,7 @@ def elementwise_multiply_2tensors(a: torch.Tensor, b: torch.Tensor) -> torch.Ten
     # multiply
     return a_expanded * b_expanded
 
+@torch.jit.script
 def elementwise_multiply_3tensors(a: torch.Tensor, b: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
     """
     Elementwise multiplication of three 2D tensors
@@ -28,6 +29,8 @@ def elementwise_multiply_3tensors(a: torch.Tensor, b: torch.Tensor, c: torch.Ten
     b_expanded = b.unsqueeze(1).unsqueeze(3)
     c_expanded = c.unsqueeze(1).unsqueeze(2)
     # multiply
+    # this is the same as torch.einsum('ni,nj,nk->nijk', a, b,c)
+    # but a bit faster
     return a_expanded * b_expanded *  c_expanded
     
 def to_numpy(t: torch.Tensor) -> np.ndarray:

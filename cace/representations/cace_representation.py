@@ -70,6 +70,7 @@ class Cace(nn.Module):
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial
                                 )
+        #self.radial_transform_jit = torch.jit.script(self.radial_transform)
 
         # for message passing layers
         self.num_message_passing = num_message_passing

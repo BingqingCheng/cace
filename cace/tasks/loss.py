@@ -30,9 +30,9 @@ class GetLoss(nn.Module):
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
         """
         super().__init__()
-        self.name = name or predict_name
         self.predict_name = predict_name
         self.target_name = target_name or predict_name
+        self.name = name or predict_name
         self.loss_fn = loss_fn
         self.loss_weight = loss_weight
         self.train_metrics = metrics
