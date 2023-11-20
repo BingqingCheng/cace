@@ -1,4 +1,5 @@
 import itertools
+import torch
 from .angular import lxlylz_factorial_coef, make_lxlylz
 
 __all__ = ['find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', "n_B_feat_dict"]
@@ -43,7 +44,22 @@ def find_combo_vectors_nu2(l_max):
             prefactors.append(prefactor)
             key = L
             vec_dict[key] = vec_dict.get(key, []) + [(lxlylz_now, lxlylz_now, prefactor)]
-    return vec_dict, vector_groups, prefactors
+
+    vectors = []
+    prefactors = []
+    vector_idx = []
+    # Convert vec_dict to a tensor-friendly format
+    vec_dict_tensors = {}
+    for i, (key, vec_lists) in enumerate(vec_dict.items()):
+        for value in vec_lists:
+            [lxlylz_now, lxlylz_now, prefactor] = value
+            vector_idx.append(i)
+            lxlylz_tensor1 = torch.tensor(lxlylz_now, dtype=torch.int64)
+            lxlylz_tensor2 = torch.tensor(lxlylz_now, dtype=torch.int64)
+            vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2]))
+            prefactors.append(prefactor)
+
+    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 def find_combo_vectors_nu3(l_max):
     vector_groups = []
@@ -65,7 +81,23 @@ def find_combo_vectors_nu3(l_max):
                             
                             key = (l1 ,l2)
                             vec_dict[key] = vec_dict.get(key, []) + [([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3], prefactor)]
-    return vec_dict, vector_groups, prefactors
+
+    vectors = []
+    prefactors = []
+    vector_idx = []
+    # Convert vec_dict to a tensor-friendly format
+    vec_dict_tensors = {}
+    for i, (key, vec_lists) in enumerate(vec_dict.items()):
+        for value in vec_lists:
+            [lxlylz_now1, lxlylz_now2, lxlylz_now3, prefactor] = value
+            vector_idx.append(i)
+            lxlylz_tensor1 = torch.tensor(lxlylz_now1, dtype=torch.int64)
+            lxlylz_tensor2 = torch.tensor(lxlylz_now2, dtype=torch.int64)
+            lxlylz_tensor3 = torch.tensor(lxlylz_now3, dtype=torch.int64)
+            vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2, lxlylz_tensor3]))
+            prefactors.append(prefactor)
+            
+    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 def find_combo_vectors_nu4(l_max):
     vector_groups = []
@@ -93,9 +125,27 @@ def find_combo_vectors_nu4(l_max):
                                 key = (l1 ,l2, dl)
                                 vec_dict[key] = vec_dict.get(key, []) + \
                                 [([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3], [lx4, ly4, lz4], prefactor)]
-    return vec_dict, vector_groups, prefactors
 
-# a dictionary storing the number of B features for (l_max, nu)
+    vectors = []
+    prefactors = []
+    vector_idx = []
+    # Convert vec_dict to a tensor-friendly format
+    vec_dict_tensors = {}
+    for i, (key, vec_lists) in enumerate(vec_dict.items()):
+        for value in vec_lists:
+            [lxlylz_now1, lxlylz_now2, lxlylz_now3, lxlylz_now4, prefactor] = value
+            vector_idx.append(i)
+            lxlylz_tensor1 = torch.tensor(lxlylz_now1, dtype=torch.int64)
+            lxlylz_tensor2 = torch.tensor(lxlylz_now2, dtype=torch.int64)
+            lxlylz_tensor3 = torch.tensor(lxlylz_now3, dtype=torch.int64)
+            lxlylz_tensor4 = torch.tensor(lxlylz_now4, dtype=torch.int64)
+            vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2, lxlylz_tensor3, lxlylz_tensor4]))
+            prefactors.append(prefactor)
+            
+    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
+
+
+# a dictionary storing the number of B features for (l_max, nu_max)
 n_B_feat_dict: dict 
 n_B_feat_dict = {(1, 1): 1,
      (1, 2): 2,

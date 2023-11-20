@@ -61,14 +61,16 @@ class EdgeEncoder(nn.Module):
 
     def forward(self, edge_tensor):
         # Split the edge tensor into two parts for node1 and node2
-        node1, node2 = edge_tensor[:,:,0], edge_tensor[:,:,1]
+        node1, node2 = edge_tensor[:,0,:], edge_tensor[:,1,:]
 
         if self.directed:
             # Use batched torch.outer for directed edges
-            encoded_edges = torch.bmm(node1.unsqueeze(2), node2.unsqueeze(1)).flatten(start_dim=1)
+            #encoded_edges = torch.bmm(node1.unsqueeze(2), node2.unsqueeze(1)).flatten(start_dim=1)
+            encoded_edges = torch.einsum('ki,kj->kij', node1, node2).flatten(start_dim=1)
         else:
             # Sort node1 and node2 along each edge for undirected edges
             min_node, max_node = torch.min(node1, node2), torch.max(node1, node2)
-            encoded_edges = torch.bmm(min_node.unsqueeze(2), max_node.unsqueeze(1)).flatten(start_dim=1)
+            #encoded_edges = torch.bmm(min_node.unsqueeze(2), max_node.unsqueeze(1)).flatten(start_dim=1)
+            encoded_edges = torch.einsum('ki,kj->kij', min_node, max_node).flatten(start_dim=1)
 
         return encoded_edges

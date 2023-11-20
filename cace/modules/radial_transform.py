@@ -3,13 +3,24 @@ import torch.nn as nn
 import numpy as np
 
 class SharedRadialLinearTransform(nn.Module):
+    # TODO: this can be jitted, however, this causes trouble in saving the model
     def __init__(self, max_l: int, radial_dim: int, random_init = True):
         super().__init__()
         self.max_l = max_l
         self.radial_dim = radial_dim
-        self.angular_dim_groups = torch.tensor(self._init_angular_dim_groups(max_l), dtype=torch.int64)
+        self.register_buffer('angular_dim_groups', torch.tensor(self._init_angular_dim_groups(max_l), dtype=torch.int64))
         self.random_init = random_init
         self.weights = self._initialize_weights(radial_dim)
+
+    def __getstate__(self):
+        # Return a dictionary of state items to be serialized.
+        state = self.__dict__.copy()
+        # Modify the state dictionary as needed, or return as is.
+        return state
+
+    def __setstate__(self, state):
+        # Restore the state.
+        self.__dict__.update(state)
 
     def _initialize_weights(self, radial_dim: int):
         if self.random_init:
@@ -84,14 +95,6 @@ class SharedRadialLinearTransform(nn.Module):
             angular_dim_groups.append(l_list_atl)
             l_now += self._compute_length_lxlylz(l)
         return angular_dim_groups
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        # Modify state if necessary
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__.update(state)
 
 """
 n_nodes = 10

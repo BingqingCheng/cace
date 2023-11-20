@@ -11,40 +11,43 @@ from collections import OrderedDict
 
 __all__=['AngularComponent', 'AngularComponent_GPU', 'make_lxlylz_list', 'make_lxlylz', 'make_l_dict', 'l_dict_to_lxlylz_list', 'compute_length_lxlylz', 'compute_length_lmax', 'compute_length_lmax_numerical', 'lxlylz_factorial_coef', 'lxlylz_factorial_coef_torch']
 
+import torch
+import torch.nn as nn
+from collections import OrderedDict
+
 class AngularComponent(nn.Module):
-    """ Angular component of the edge basis functions 
-        This version runs faster on cpus but slower on gpus
+    """ Angular component of the edge basis functions
+        Optimized for GPU usage
     """
     def __init__(self, l_max):
         super().__init__()
         self.l_max = l_max
-        self.lxlylz_dict = OrderedDict({l: [] for l in range(l_max + 1)})
-        self.lxlylz_list = None
+        self.precompute_lxlylz()
 
-    def forward(self, vectors):
-        if not isinstance(vectors, torch.Tensor):
-            raise TypeError("Input must be a torch.Tensor")
-        if vectors.dim() != 2 or vectors.size(1) != 3:
-            raise ValueError("Input tensor must have shape [N, 3]")
-
+    def precompute_lxlylz(self):
         self.lxlylz_dict = OrderedDict({l: [] for l in range(self.l_max + 1)})
-        N, _ = vectors.shape
-        self.lxlylz_dict[0] = [[0, 0, 0]]
-        computed_values = {(0, 0, 0): torch.ones(N, device=vectors.device)}
-
+        self.lxlylz_dict[0] = [(0, 0, 0)]
         for l in range(1, self.l_max + 1):
             for prev_lxlylz_combination in self.lxlylz_dict[l - 1]:
                 for i in range(3):
-                    lxlylz_combination = prev_lxlylz_combination.copy()
+                    lxlylz_combination = list(prev_lxlylz_combination)
                     lxlylz_combination[i] += 1
                     lxlylz_combination_tuple = tuple(lxlylz_combination)
-                    if lxlylz_combination_tuple not in computed_values:
-                        self.lxlylz_dict[l].append(lxlylz_combination)
-                        computed_values[lxlylz_combination_tuple] = computed_values[tuple(prev_lxlylz_combination)] * vectors[:, i]
-
+                    if lxlylz_combination_tuple not in self.lxlylz_dict[l]:
+                        self.lxlylz_dict[l].append(lxlylz_combination_tuple)
         self.lxlylz_list = self._convert_lxlylz_to_list()
+
+    def forward(self, vectors: torch.Tensor) -> torch.Tensor:
+
+        computed_values = {(0, 0, 0): torch.ones(vectors.size(0), device=vectors.device)}
+        for l in range(1, self.l_max + 1):
+            for lxlylz_combination in self.lxlylz_dict[l]:
+                prev_lxlylz_combination = tuple(l - 1 if i == lxlylz_combination.index(max(lxlylz_combination)) else l for i, l in enumerate(lxlylz_combination))
+                i = lxlylz_combination.index(max(lxlylz_combination))
+                computed_values[lxlylz_combination] = computed_values[prev_lxlylz_combination] * vectors[:, i]
+
         computed_values_list = self._convert_computed_values_to_list(computed_values)
-        return computed_values_list
+        return torch.stack(computed_values_list, dim=1)
 
     def _convert_lxlylz_to_list(self):
         lxlylz_list = []
@@ -53,12 +56,12 @@ class AngularComponent(nn.Module):
         return lxlylz_list
 
     def _convert_computed_values_to_list(self, computed_values):
-        computed_values_list = [computed_values[tuple(lxlylz_combination)] for lxlylz_combination in self.lxlylz_list]
-        return torch.stack(computed_values_list, dim=1)
+        return [computed_values[comb] for comb in self.lxlylz_list]
 
     def get_lxlylz_list(self):
         if self.lxlylz_list is None:
             raise ValueError("You must call forward before getting lxlylz_list")
+        #return torch.tensor(self.lxlylz_list, dtype=torch.int64)
         return self.lxlylz_list
 
     def get_lxlylz_dict(self):
@@ -76,11 +79,7 @@ class AngularComponent_GPU(nn.Module):
         self.lxlylz_dict = make_l_dict(l_max)
         self.lxlylz_list = l_dict_to_lxlylz_list(self.lxlylz_dict)
 
-    def forward(self, vectors: torch.Tensor):
-        if not isinstance(vectors, torch.Tensor):
-            raise TypeError("Input must be a torch.Tensor")
-        if vectors.dim() != 2 or vectors.size(1) != 3:
-            raise ValueError("Input tensor must have shape [N, 3]")
+    def forward(self, vectors: torch.Tensor) -> torch.Tensor:
 
         lxlylz_tensor = torch.tensor(self.lxlylz_list, device=vectors.device, dtype=vectors.dtype)
 
@@ -124,6 +123,7 @@ def make_lxlylz(l):
             lz = l - lx - ly
             if lz >= 0:
                 lxlylz.append([lx, ly, lz])
+    #return torch.tensor(lxlylz, dtype=torch.int64) #lxlylz
     return lxlylz
 
 def make_l_dict(l_max):
@@ -179,28 +179,27 @@ def lxlylz_factorial_coef(lxlylz):
 
     return result
 
-def lxlylz_factorial_coef_torch(lxlylz):
-    # Ensure inputs are integers
+def lxlylz_factorial_coef_torch(lxlylz) -> torch.Tensor:
+
+    # Check if lxlylz is a tensor, if not, convert to tensor
+    if not isinstance(lxlylz, torch.Tensor):
+        lxlylz = torch.tensor(lxlylz, dtype=torch.int64)
+
     if not torch.all(lxlylz == lxlylz.int()):
         raise ValueError("All elements of lxlylz must be integers.")
 
-    # Sort the elements in descending order
     sorted_lxlylz, _ = torch.sort(lxlylz, descending=True)
-
-    # Compute the sum l = lx + ly + lz
     l = torch.sum(sorted_lxlylz)
 
-    # The result starts at 1 and will be built up by multiplication
     result = torch.tensor(1, dtype=torch.int)
 
-    # Compute the multinomial coefficient
-    for i in range(int(sorted_lxlylz[0])):
-        result *= (l - i)
-        result //= (i + 1)
+    for i in torch.arange(int(sorted_lxlylz[0])):
+        result = result * (l - i)
+        result = (result / (i + 1)).floor()
 
-    for i in range(1, len(sorted_lxlylz)):
-        for j in range(int(sorted_lxlylz[i])):
-            result *= (l - sorted_lxlylz[:i].sum() - j)
-            result //= (j + 1)
+    for i in torch.arange(1, len(sorted_lxlylz)):
+        for j in torch.arange(int(sorted_lxlylz[i])):
+            result = result * (l - sorted_lxlylz[:i].sum() - j)
+            result = (result / (j + 1)).floor()
 
     return result

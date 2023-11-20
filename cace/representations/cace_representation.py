@@ -12,13 +12,11 @@ from ..modules import (
     AngularComponent_GPU,
     SharedRadialLinearTransform,
     Symmetrizer,
+    Symmetrizer_JIT,
     )
 from ..modules import (
     get_edge_node_type, 
     get_edge_vectors_and_lengths,
-    find_combo_vectors_nu2, 
-    find_combo_vectors_nu3, 
-    find_combo_vectors_nu4
     ) 
 
 __all__ = ["Cace"]
@@ -66,11 +64,12 @@ class Cace(nn.Module):
         self.radial_basis = radial_basis
         self.n_radial = self.radial_basis.n_rbf
         self.cutoff_fn = cutoff_fn
-        self.radial_transform = SharedRadialLinearTransform(
+        radial_transform = SharedRadialLinearTransform(
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial
                                 )
-        #self.radial_transform_jit = torch.jit.script(self.radial_transform)
+        self.radial_transform = radial_transform
+        #self.radial_transform = torch.jit.script(radial_transform)
 
         # for message passing layers
         self.num_message_passing = num_message_passing
@@ -84,16 +83,10 @@ class Cace(nn.Module):
         else:
             self.angular_basis = AngularComponent_GPU(self.max_l)
 
-        if max_nu > 4:
-            raise NotImplementedError("max_nu > 4 is not supported yet.")         
-        self.vec_dict_allnu = {}
-        self.vec_dict_allnu[2], _, _  = find_combo_vectors_nu2(self.max_l)
-        self.vec_dict_allnu[3], _, _  = find_combo_vectors_nu3(self.max_l)
-        self.vec_dict_allnu[4], _, _  = find_combo_vectors_nu4(self.max_l)
-
-        self.l_list = None
-        self.symmetrizer = None
-
+        self.l_list = self.angular_basis.get_lxlylz_list()
+        self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
+        #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)
+        #self.symmetrizer = torch.jit.script(symmetrizer)
         self.timeit = timeit
 
     def forward(
@@ -122,6 +115,8 @@ class Cace(nn.Module):
 
         ## embed to a different dimension
         node_embedded = self.node_embedding(node_one_hot)
+        #node_embedded = node_one_hot
+        data['node_embedded'] = node_embedded
         t2 = time.time()
         if self.timeit: print("node_embedded time: {}".format(t2-t1))
 
@@ -129,6 +124,8 @@ class Cace(nn.Module):
         edge_type = get_edge_node_type(edge_index=data["edge_index"], 
                               node_type=node_embedded)
         encoded_edges = self.edge_coding(edge_type)
+        data['edge_encoded'] = encoded_edges
+
         t3 = time.time()        
         if self.timeit: print("encoded_edges time: {}".format(t3-t2))
 
@@ -178,9 +175,7 @@ class Cace(nn.Module):
         if self.timeit: print("scatter_sum time: {}".format(t8-t7))
 
         # symmetrized B basis
-        if self.symmetrizer == None:
-            self.symmetrizer = Symmetrizer(self.max_nu, self.vec_dict_allnu, self.l_list)
-        node_feat_B = self.symmetrizer.symmetrize_A_basis(node_attr=node_feat_A)
+        node_feat_B = self.symmetrizer(node_attr=node_feat_A)
         node_feats_list.append(node_feat_B)
 
         t9 = time.time()
@@ -196,7 +191,7 @@ class Cace(nn.Module):
                                     index=data.edge_index[1],
                                     dim=0,
                                     dim_size=n_nodes)
-            node_feat_B = self.symmetrizer.symmetrize_A_basis(node_attr=node_feat_A)
+            node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
             t_mp_end = time.time()
             if self.timeit: print("message passing time: {}".format(t_mp_end-t_mp_start))
