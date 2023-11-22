@@ -64,7 +64,7 @@ class TrainingTask_PL(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
 
-        pred = self.model(batch, training=True)
+        pred = self.model(batch)
         loss = self.loss_fn(pred, batch)
 
         self.log("train_loss", loss, on_step=True, on_epoch=False, prog_bar=False)
@@ -76,7 +76,7 @@ class TrainingTask_PL(pl.LightningModule):
         if isinstance(batch, tuple) and len(batch) == 1 and isinstance(batch[0], dict):
             batch = batch[0]
 
-        pred = self.model(batch, training=True)
+        pred = self.model(batch)
         loss = self.loss_fn(pred, batch)
 
         self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
