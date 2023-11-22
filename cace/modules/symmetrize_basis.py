@@ -104,9 +104,12 @@ class Symmetrizer(nn.Module):
         if max_nu > 4:
             raise NotImplementedError("max_nu > 4 is not supported yet.")
         self.vec_dict_allnu = {}
-        self.vec_dict_allnu[2]  = find_combo_vectors_nu2(self.max_l)[0]
-        self.vec_dict_allnu[3]  = find_combo_vectors_nu3(self.max_l)[0]
-        self.vec_dict_allnu[4]  = find_combo_vectors_nu4(self.max_l)[0]
+        if max_nu >= 2:
+            self.vec_dict_allnu[2]  = find_combo_vectors_nu2(self.max_l)[0]
+        if max_nu >= 3:
+            self.vec_dict_allnu[3]  = find_combo_vectors_nu3(self.max_l)[0]
+        if max_nu == 4:
+            self.vec_dict_allnu[4]  = find_combo_vectors_nu4(self.max_l)[0]
 
         # Convert elements of l_list to tuples for dictionary keys
         l_list_tuples = [tuple(l) for l in l_list]
@@ -129,7 +132,11 @@ class Symmetrizer(nn.Module):
                 for item in lxlylz_list:
                     prefactor = item[-1]
                     indices = [self.l_list_indices[tuple(lxlylz)] for lxlylz in item[:-1]]
-                    product = torch.prod(node_attr[:, :, indices, :], dim=2)
+                    # somehow MPS doesn't like this, as it uses cumprod
+                    #product = torch.prod(node_attr[:, :, indices, :], dim=2)
+                    product = node_attr[:, :, indices[0], :]
+                    for idx in indices[1:]:
+                        product = product * node_attr[:, :, idx, :]
                     sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
             n_sym_node_attr += len(vec_dict)
 

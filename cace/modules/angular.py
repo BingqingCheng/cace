@@ -92,7 +92,9 @@ class AngularComponent_GPU(nn.Module):
         terms = vectors_expanded ** lxlylz_expanded  # Shape: [N, M, 3]
 
         # Multiply across the last dimension (x^lx * y^ly * z^lz) for each term
-        computed_terms = torch.prod(terms, dim=-1)  # Shape: [N, M]
+        #computed_terms = torch.prod(terms, dim=-1)  # Shape: [N, M]
+        #also to avoid the mps problem with cumprod
+        computed_terms = terms[:, :, 0] * terms[:, :, 1] * terms[:, :, 2]
 
         return computed_terms
 

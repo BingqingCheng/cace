@@ -14,7 +14,7 @@ class NodeEncoder(nn.Module):
         self.num_classes = len(zs)
         self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.long))
 
-    def forward(self, atomic_numbers):
+    def forward(self, atomic_numbers) -> torch.Tensor:
         device = atomic_numbers.device
 
         # Directly convert atomic numbers to indices using the precomputed map
@@ -51,7 +51,7 @@ class NodeEmbedding(nn.Module):
     def reset_parameters(self, embedding_weights):
         nn.init.xavier_uniform_(embedding_weights)
 
-    def forward(self, data):
+    def forward(self, data: torch.Tensor) -> torch.Tensor:
         return torch.mm(data, self.embedding_weights)
 
 class EdgeEncoder(nn.Module):
@@ -59,7 +59,7 @@ class EdgeEncoder(nn.Module):
         super().__init__()
         self.directed = directed
 
-    def forward(self, edge_tensor):
+    def forward(self, edge_tensor: torch.Tensor) -> torch.Tensor:
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = edge_tensor[:,0,:], edge_tensor[:,1,:]
 

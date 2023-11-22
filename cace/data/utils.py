@@ -204,16 +204,18 @@ def load_from_xyz(
     return configs
 
 def batch_to_atoms(batched_data: Dict, 
-                           output_file: str = None,
-                           energy_key: str = 'energy', 
-                           force_key: str = 'forces', 
-                           cace_energy_key: str = 'CACE_energy', 
-                           cace_force_key: str = 'CACE_forces'):
+                   pred_data: Optional[Dict] = None,
+                   output_file: str = None,
+                   energy_key: str = 'energy', 
+                   force_key: str = 'forces', 
+                   cace_energy_key: str = 'CACE_energy', 
+                   cace_force_key: str = 'CACE_forces'):
     """
     Create ASE Atoms objects from batched graph data and write to an XYZ file.
 
     Parameters:
     - batched_data (Dict): Batched data containing graph information.
+    - pred_data (Dict): Predicted data. If not given, the pred_data name is assumed to also be the batched_data.
     - energy_key (str): Key for accessing energy information in batched_data.
     - force_key (str): Key for accessing force information in batched_data.
     - cace_energy_key (str): Key for accessing CACE energy information.
@@ -221,6 +223,8 @@ def batch_to_atoms(batched_data: Dict,
     - output_file (str): Name of the output file to write the Atoms objects.
     """
 
+    if pred_data == None:
+        pred_data = batched_data
     atoms_list = []
     batch = batched_data.batch
     num_graphs = batch.max().item() + 1
@@ -236,8 +240,8 @@ def batch_to_atoms(batched_data: Dict,
 
         energy = to_numpy(batched_data[energy_key][i])
         forces = to_numpy(batched_data[force_key][mask])
-        cace_energy = to_numpy(batched_data[cace_energy_key][i])
-        cace_forces = to_numpy(batched_data[cace_force_key][mask])
+        cace_energy = to_numpy(pred_data[cace_energy_key][i])
+        cace_forces = to_numpy(pred_data[cace_force_key][mask])
 
         # Set periodic boundary conditions if the cell is defined
         pbc = np.all(np.mean(cell, axis=0) > 0)
@@ -253,6 +257,6 @@ def batch_to_atoms(batched_data: Dict,
 
     # Write all atoms to the output file
     if output_file: 
-        ase.io.write(output_file, atoms_list)
+        ase.io.write(output_file, atoms_list, append=True)
     return atoms_list
 
