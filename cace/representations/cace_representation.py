@@ -15,7 +15,6 @@ from ..modules import (
     Symmetrizer_JIT,
     )
 from ..modules import (
-    get_edge_node_type, 
     get_edge_vectors_and_lengths,
     ) 
 
@@ -34,6 +33,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
+        avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
     ):
@@ -54,6 +54,7 @@ class Cace(nn.Module):
         self.cutoff = cutoff
         self.max_l = max_l
         self.max_nu = max_nu
+        self.mp_norm_factor = 1.0/(avg_num_neighbors)**0.5 # normalization factor for message passing
 
         # layers
         self.node_onehot = NodeEncoder(self.zs)
@@ -102,6 +103,10 @@ class Cace(nn.Module):
             num_graphs = data["ptr"].numel() - 1
         except:
             num_graphs = 1
+        if data["batch"] == None:
+            batch_now = torch.zeros(n_nodes, dtype=torch.long, device=self.device)
+        else:
+            batch_now = data["batch"]
 
         node_feats_list = []
 
@@ -116,15 +121,12 @@ class Cace(nn.Module):
         ## embed to a different dimension
         node_embedded = self.node_embedding(node_one_hot)
         #node_embedded = node_one_hot
-        data['node_embedded'] = node_embedded
         t2 = time.time()
         if self.timeit: print("node_embedded time: {}".format(t2-t1))
 
         ## get the edge type
-        edge_type = get_edge_node_type(edge_index=data["edge_index"], 
-                              node_type=node_embedded)
-        encoded_edges = self.edge_coding(edge_type)
-        data['edge_encoded'] = encoded_edges
+        encoded_edges = self.edge_coding(edge_index=data["edge_index"],
+                                         node_type=node_embedded)
 
         t3 = time.time()        
         if self.timeit: print("encoded_edges time: {}".format(t3-t2))
@@ -144,9 +146,6 @@ class Cace(nn.Module):
         angular_component = self.angular_basis(edge_vectors)
         t5 = time.time()
         if self.timeit: print("radial and angular component time: {}".format(t5-t4))
-
-        if self.l_list == None:
-            self.l_list = self.angular_basis.get_lxlylz_list()
 
         # combine
         # 4-dimensional tensor: [n_edges, radial_dim, angular_dim, embedding_dim]
@@ -169,7 +168,6 @@ class Cace(nn.Module):
                                   index=data.edge_index[1], 
                                   dim=0, 
                                   dim_size=n_nodes)
-        #data["node_feat_A"] = node_feat_A # for debugging
 
         t8 = time.time()
         if self.timeit: print("scatter_sum time: {}".format(t8-t7))
@@ -187,15 +185,19 @@ class Cace(nn.Module):
             sender_features = node_feat_A[data.edge_index[0]]
             radial_decay = mp_r(edge_lengths)
             message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
-            node_feat_A = node_feat_A + scatter_sum(src=message,
+            node_feat_A = node_feat_A * 0.25 + scatter_sum(src=message,
                                     index=data.edge_index[1],
                                     dim=0,
-                                    dim_size=n_nodes)
+                                    dim_size=n_nodes) * self.mp_norm_factor
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
             t_mp_end = time.time()
             if self.timeit: print("message passing time: {}".format(t_mp_end-t_mp_start))
 
-        data['node_feat_B'] = torch.stack(node_feats_list, dim=-1)
+        node_feats_out = torch.stack(node_feats_list, dim=-1)
 
-        return data
+        return {
+            "positions": data["positions"],
+            "batch": batch_now,
+            "node_feats": node_feats_out,
+        }

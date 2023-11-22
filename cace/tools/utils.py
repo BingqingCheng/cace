@@ -38,3 +38,16 @@ def atomic_numbers_to_indices(
 ) -> np.ndarray:
     to_index_fn = np.vectorize(z_table.z_to_index)
     return to_index_fn(atomic_numbers)
+
+def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float:
+    num_neighbors = []
+
+    for batch in data_loader:
+        _, receivers = batch.edge_index
+        _, counts = torch.unique(receivers, return_counts=True)
+        num_neighbors.append(counts)
+
+    avg_num_neighbors = torch.mean(
+        torch.cat(num_neighbors, dim=0).type(torch.get_default_dtype())
+    )
+    return to_numpy(avg_num_neighbors).item()

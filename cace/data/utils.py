@@ -207,7 +207,7 @@ def batch_to_atoms(batched_data: Dict,
                    pred_data: Optional[Dict] = None,
                    output_file: str = None,
                    energy_key: str = 'energy', 
-                   force_key: str = 'forces', 
+                   force_key: str = 'forces',
                    cace_energy_key: str = 'CACE_energy', 
                    cace_force_key: str = 'CACE_forces'):
     """
@@ -252,7 +252,6 @@ def batch_to_atoms(batched_data: Dict,
         atoms.arrays[force_key] = forces
         atoms.info[cace_energy_key] = cace_energy.item() if np.ndim(cace_energy) == 0 else cace_energy
         atoms.arrays[cace_force_key] = cace_forces
-
         atoms_list.append(atoms)
 
     # Write all atoms to the output file

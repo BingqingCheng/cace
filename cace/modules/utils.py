@@ -19,7 +19,7 @@ def compute_forces(
         inputs=[positions],  # [n_nodes, 3]
         grad_outputs=grad_outputs,
         retain_graph=training,  # Make sure the graph is not destroyed during training
-        create_graph=False,  # Create graph for second derivative
+        create_graph=training,  # Create graph for second derivative
         allow_unused=True,  # For complete dissociation turn to true
     )[
         0
@@ -149,12 +149,10 @@ def get_edge_vectors_and_lengths(
 def get_edge_node_type(
     edge_index: torch.Tensor,  # [2, n_edges]
     node_type: torch.Tensor,  # [n_nodes, n_dims]
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     edge_type = torch.zeros([edge_index.shape[1], 2, node_type.shape[1]], 
                            dtype=node_type.dtype, device=node_type.device)
     sender_type = node_type[edge_index[0]]
     receiver_type = node_type[edge_index[1]]
-    edge_type[:, 0, :] = sender_type
-    edge_type[:, 1, :] = receiver_type
-    return edge_type  # [n_edges, 2, n_dims]
+    return sender_type, receiver_type  # [n_edges, n_dims]
 

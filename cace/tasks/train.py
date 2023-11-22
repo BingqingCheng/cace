@@ -20,7 +20,7 @@ class TrainingTask(nn.Module):
                 optimizer_args: Optional[Dict[str, Any]] = None,
                 scheduler_cls: Optional[Type] = None,
                 scheduler_args: Optional[Dict[str, Any]] = None,
-                max_grad_norm: float = 10,
+                max_grad_norm: float = 100,
                 ):
         """
         Args:

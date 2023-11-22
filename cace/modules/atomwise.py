@@ -77,8 +77,7 @@ class Atomwise(nn.Module):
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     #def forward(self, features: torch.Tensor) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
-        #print(data["batch"])
-        features = data['node_feat_B']
+        features = data['node_feats']
         #print("get data")
         features = features.reshape(features.shape[0], -1)
         #print("read features")
