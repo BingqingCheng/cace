@@ -28,22 +28,23 @@ class Dense(nn.Linear):
             weight_init (Callable): Function to initialize weights.
             bias_init (Callable): Function to initialize bias.
         """
-        super().__init__(in_features, out_features, bias)
-        self.activation = activation
         self.weight_init = weight_init
         self.bias_init = bias_init
+        super().__init__(in_features, out_features, bias)
+
+        self.activation = activation
+        if self.activation is None:
+            self.activation = nn.Identity()
 
     def reset_parameters(self):
-        """Reinitialize the layer's parameters."""
         self.weight_init(self.weight)
         if self.bias is not None:
             self.bias_init(self.bias)
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        """Define the forward pass of the layer."""
+    def forward(self, input: torch.Tensor):
         y = F.linear(input, self.weight, self.bias)
-        return self.activation(y)
-
+        y = self.activation(y)
+        return y
 
 class AtomicEnergiesBlock(nn.Module):
     def __init__(self, nz:int, trainable=True, atomic_energies: Optional[Union[np.ndarray, torch.Tensor]]=None):
