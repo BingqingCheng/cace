@@ -7,49 +7,43 @@ import numpy as np
 
 __all__ = ["Dense", "AtomicEnergiesBlock"]
 
-
 class Dense(nn.Linear):
-    r"""Fully connected linear layer with activation function.
-
-    .. math::
-       y = activation(x W^T + b)
-    """
-
     def __init__(
         self,
         in_features: int,
         out_features: int,
         bias: bool = True,
-        activation: Union[Callable, nn.Module] = None,
+        activation: Union[Callable, nn.Module] = nn.Identity(),
         weight_init: Callable = nn.init.xavier_uniform_,
         bias_init: Callable = nn.init.zeros_,
     ):
         """
+        Fully connected linear layer with an optional activation function.
+
         Args:
-            in_features: number of input feature :math:`x`.
-            out_features: umber of output features :math:`y`.
-            bias: If False, the layer will not adapt bias :math:`b`.
-            activation: if None, no activation function is used.
-            weight_init: weight initializer from current weight.
-            bias_init: bias initializer from current bias.
+            in_features (int): Number of input features.
+            out_features (int): Number of output features.
+            bias (bool): If False, the layer will not have a bias term.
+            activation (Callable or nn.Module): Activation function. Defaults to Identity.
+            weight_init (Callable): Function to initialize weights.
+            bias_init (Callable): Function to initialize bias.
         """
+        super().__init__(in_features, out_features, bias)
+        self.activation = activation
         self.weight_init = weight_init
         self.bias_init = bias_init
-        super(Dense, self).__init__(in_features, out_features, bias)
-
-        self.activation = activation
-        if self.activation is None:
-            self.activation = nn.Identity()
 
     def reset_parameters(self):
+        """Reinitialize the layer's parameters."""
         self.weight_init(self.weight)
         if self.bias is not None:
             self.bias_init(self.bias)
 
-    def forward(self, input: torch.Tensor):
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        """Define the forward pass of the layer."""
         y = F.linear(input, self.weight, self.bias)
-        y = self.activation(y)
-        return y
+        return self.activation(y)
+
 
 class AtomicEnergiesBlock(nn.Module):
     def __init__(self, nz:int, trainable=True, atomic_energies: Optional[Union[np.ndarray, torch.Tensor]]=None):

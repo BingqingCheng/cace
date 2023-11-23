@@ -50,7 +50,7 @@ class CosineCutoff(nn.Module):
             cutoff (float, optional): cutoff radius.
         """
         super().__init__()
-        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
+        self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype()))
 
     def forward(self, input: torch.Tensor):
         return cosine_cutoff(input, self.cutoff)
@@ -98,8 +98,8 @@ class MollifierCutoff(nn.Module):
             eps: Offset added to distances for numerical stability.
         """
         super().__init__()
-        self.register_buffer("cutoff", torch.FloatTensor([cutoff]))
-        self.register_buffer("eps", torch.FloatTensor([eps]))
+        self.register_buffer("cutoff",  torch.tensor(cutoff, dtype=torch.get_default_dtype()))
+        self.register_buffer("eps",  torch.tensor(eps, dtype=torch.get_default_dtype()))
 
     def forward(self, input: torch.Tensor):
         return mollifier_cutoff(input, self.cutoff, self.eps)
@@ -138,8 +138,8 @@ class SwitchFunction(nn.Module):
             switch_off (float): Value from which on switch is 0.
         """
         super(SwitchFunction, self).__init__()
-        self.register_buffer("switch_on", torch.Tensor([switch_on]))
-        self.register_buffer("switch_off", torch.Tensor([switch_off]))
+        self.register_buffer("switch_on",  torch.tensor(switch_on, dtype=torch.get_default_dtype()))
+        self.register_buffer("switch_off",  torch.tensor(switch_off, dtype=torch.get_default_dtype()))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -180,16 +180,12 @@ class PolynomialCutoff(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # yapf: disable
         envelope = (
                 1.0
                 - ((self.p + 1.0) * (self.p + 2.0) / 2.0) * torch.pow(x / self.cutoff, self.p)
                 + self.p * (self.p + 2.0) * torch.pow(x / self.cutoff, self.p + 1)
                 - (self.p * (self.p + 1.0) / 2) * torch.pow(x / self.cutoff, self.p + 2)
         )
-        # yapf: enable
-
-        # noinspection PyUnresolvedReferences
         return envelope * (x < self.cutoff)
 
     def __repr__(self):

@@ -49,28 +49,6 @@ class SharedRadialLinearTransform(nn.Module):
                 output[:, :, ang_dim, :] = transformed
 
         """
-        """
-        # this batch the transformation for each group, slower than the original code on cpus, need to test on gpus
-        for group_idx, group in enumerate(self.angular_dim_groups):
-            weight = self.weights[group_idx]
-
-            # Gather all angular dimensions for the current group
-            group_x = x[:, :, group, :]  # Shape: [n_nodes, radial_dim, len(group), embedding_dim]
-
-            # Reshape for batch operation: [n_nodes * len(group), embedding_dim, radial_dim]
-            group_x_reshaped = group_x.permute(0, 2, 3, 1).reshape(-1, embedding_dim, radial_dim)
-            
-            # Apply the transformation for the entire group at once
-            transformed_group = torch.matmul(group_x_reshaped, weight)
-
-            # Reshape back to [n_nodes, len(group), embedding_dim, radial_dim]
-            transformed_group = transformed_group.reshape(n_nodes, len(group), embedding_dim, radial_dim)
-            transformed_group = transformed_group.permute(0, 3, 1, 2)  # Back to [n_nodes, radial_dim, len(group), embedding_dim]
-
-            # Assign to the output tensor for each angular dimension
-            output[:, :, group, :] = transformed_group
-        """
-        #"""
         for index, weight in enumerate(self.weights):
             i_start = self.angular_dim_groups[index, 0]
             i_end = self.angular_dim_groups[index, 1]
@@ -101,7 +79,7 @@ n_nodes = 10
 radial_dim = 5
 embedding_dim = 4
 A = torch.randn(n_nodes, radial_dim, 20, embedding_dim, device=device)
-transform_layer =  cace.modules.SharedRadialLinearTransform(max_l=3, radial_dim=5)
+transform_layer =  cace.modules.SharedRadialLinearTransform(max_l=3, radial_dim=5, random_init = False)
 A_transformed = transform_layer(A)
 
 # Check if the transformation preserves the old tensor

@@ -14,7 +14,7 @@ class NodeEncoder(nn.Module):
     def __init__(self, zs: Sequence[int]):
         super().__init__()
         self.num_classes = len(zs)
-        self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.long))
+        self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.int64))
 
     def forward(self, atomic_numbers) -> torch.Tensor:
         device = atomic_numbers.device
@@ -26,12 +26,12 @@ class NodeEncoder(nn.Module):
         indices[indices < 0] = 0
 
         # Generate one-hot encoding
-        one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes)
+        one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes, device=device)
         return one_hot_encoding
 
-    def to_one_hot(self, indices: torch.Tensor, num_classes: int) -> torch.Tensor:
+    def to_one_hot(self, indices: torch.Tensor, num_classes: int, device=torch.device) -> torch.Tensor:
         shape = indices.shape[:-1] + (num_classes,)
-        oh = torch.zeros(shape, device=indices.device)
+        oh = torch.zeros(shape, device=device)
 
         # scatter_ is the in-place version of scatter
         oh.scatter_(dim=-1, index=indices, value=1)
@@ -48,7 +48,7 @@ class NodeEmbedding(nn.Module):
         if trainable:
             self.embedding_weights = nn.Parameter(embedding_weights)
         else:
-            self.register_buffer("embedding_weights", embedding_weights)
+            self.register_buffer("embedding_weights", embedding_weights, dtype=torch.get_default_dtype())
 
     def reset_parameters(self, embedding_weights):
         nn.init.xavier_uniform_(embedding_weights)
@@ -57,7 +57,7 @@ class NodeEmbedding(nn.Module):
         return torch.mm(data, self.embedding_weights)
 
 class EdgeEncoder(nn.Module):
-    def __init__(self, directed=False):
+    def __init__(self, directed=True):
         super().__init__()
         self.directed = directed
 

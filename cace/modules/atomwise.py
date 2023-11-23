@@ -70,17 +70,14 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 )
             self.outnet = self.outnet.to(features.device)
-            #print("built self.outnet")
         else:
             self.outnet = None
 
     def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    #def forward(self, features: torch.Tensor) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feats']
-        #print("get data")
         features = features.reshape(features.shape[0], -1)
-        #print("read features")
+
         if self.n_in is None:
             self.n_in = features.shape[1]
         else:
@@ -95,11 +92,9 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 )
             self.outnet = self.outnet.to(features.device)
-            #print("built self.outnet")
 
         # predict atomwise contributions
         y = self.outnet(features)
-        #print("predicted y")
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
@@ -114,7 +109,7 @@ class Atomwise(nn.Module):
             y = torch.squeeze(y, -1)
 
             if self.aggregation_mode == "avg":
-                y = y / data.num_nodes
+                y = y / torch.bincount(data['batch'])
 
         data[self.output_key] = y
         return data

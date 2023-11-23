@@ -17,7 +17,7 @@ from collections import OrderedDict
 
 class AngularComponent(nn.Module):
     """ Angular component of the edge basis functions
-        Optimized for GPU usage
+        Optimized for CPU usage (use recursive formula)
     """
     def __init__(self, l_max):
         super().__init__()
@@ -39,7 +39,7 @@ class AngularComponent(nn.Module):
 
     def forward(self, vectors: torch.Tensor) -> torch.Tensor:
 
-        computed_values = {(0, 0, 0): torch.ones(vectors.size(0), device=vectors.device)}
+        computed_values = {(0, 0, 0): torch.ones(vectors.size(0), device=vectors.device, dtype=vectors.dtype)}
         for l in range(1, self.l_max + 1):
             for lxlylz_combination in self.lxlylz_dict[l]:
                 prev_lxlylz_combination = tuple(l - 1 if i == lxlylz_combination.index(max(lxlylz_combination)) else l for i, l in enumerate(lxlylz_combination))
@@ -125,7 +125,7 @@ def make_lxlylz(l):
             lz = l - lx - ly
             if lz >= 0:
                 lxlylz.append([lx, ly, lz])
-    #return torch.tensor(lxlylz, dtype=torch.int64) #lxlylz
+    #return torch.tensor(lxlylz, dtype=torch.int64)
     return lxlylz
 
 def make_l_dict(l_max):

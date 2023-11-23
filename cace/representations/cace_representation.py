@@ -99,10 +99,10 @@ class Cace(nn.Module):
         # setup
         #data["positions"].requires_grad_(True)
         n_nodes = data['positions'].shape[0]
-        try:
-            num_graphs = data["ptr"].numel() - 1
-        except:
-            num_graphs = 1
+        #try:
+        #    num_graphs = data["ptr"].numel() - 1
+        #except:
+        #    num_graphs = 1
         if data["batch"] == None:
             batch_now = torch.zeros(n_nodes, dtype=torch.long, device=self.device)
         else:
@@ -143,6 +143,8 @@ class Cace(nn.Module):
 
         radial_component = self.radial_basis(edge_lengths) 
         radial_cutoff = self.cutoff_fn(edge_lengths)
+        # normalize=False, use the REANN way
+        #edge_vectors = edge_vectors * radial_cutoff.view(edge_vectors.shape[0], 1)
         angular_component = self.angular_basis(edge_vectors)
         t5 = time.time()
         if self.timeit: print("radial and angular component time: {}".format(t5-t4))

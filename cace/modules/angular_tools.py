@@ -5,7 +5,7 @@ from .angular import lxlylz_factorial_coef, make_lxlylz
 __all__ = ['find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', "n_B_feat_dict"]
 
 """
-We store the values
+We can store the values
 
 vec_dict_allnu = {}
 vec_dict_allnu[2], _, _  = find_combo_vectors_nu2(l_max)

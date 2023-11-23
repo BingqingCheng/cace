@@ -76,10 +76,10 @@ class ExponentialDecayRBF(nn.Module):
             prefactor = torch.tensor(prefactor, dtype=torch.get_default_dtype())
 
         if n_rbf == 1:
-             r0 = torch.tensor(cutoff / 2.0)
+             r0 = torch.tensor(cutoff / 2.0, dtype=torch.get_default_dtype())
         else:
             # compute offset and width of Gaussian functions
-            r0 = torch.linspace(0, cutoff, n_rbf + 2) [1:-1]
+            r0 = torch.linspace(0, cutoff, n_rbf + 2, dtype=torch.get_default_dtype()) [1:-1]
 
         self.register_buffer("cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype()))
 
@@ -124,7 +124,7 @@ class GaussianRBF(nn.Module):
         self.n_rbf = n_rbf
 
         # compute offset and width of Gaussian functions
-        offset = torch.linspace(start, cutoff, n_rbf)
+        offset = torch.linspace(start, cutoff, n_rbf, dtype=torch.get_default_dtype())
         widths = torch.FloatTensor(
             torch.abs(offset[1] - offset[0]) * torch.ones_like(offset)
         )
@@ -167,7 +167,7 @@ class GaussianRBFCentered(nn.Module):
         self.n_rbf = n_rbf
 
         # compute offset and width of Gaussian functions
-        widths = torch.linspace(start, cutoff, n_rbf)
+        widths = torch.linspace(start, cutoff, n_rbf, dtype=torch.get_default_dtype())
         offset = torch.zeros_like(widths)
 
         self.register_buffer(
