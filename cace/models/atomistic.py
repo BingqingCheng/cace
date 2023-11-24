@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from ..modules import Transform
+from ..tools import torch_geometric
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
@@ -100,8 +101,12 @@ class AtomisticModel(nn.Module):
         self, data: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         for p in self.required_derivatives:
-            if p in data.to_dict().keys():
-                data[p].requires_grad_(True)
+            if isinstance(data, torch_geometric.batch.Batch):
+                if p in data.to_dict().keys():
+                    data[p].requires_grad_(True)
+            else:
+                if p in data.keys():
+                    data[p].requires_grad_(True)
         return data
 
     def initialize_transforms(self, datamodule):

@@ -42,7 +42,6 @@ class TrainingTask(nn.Module):
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
     def forward(self, data):
-        data.to(self.device)
         return self.model(data)
 
     def loss_fn(self, pred, batch):
@@ -65,9 +64,10 @@ class TrainingTask(nn.Module):
 
     def train_step(self, batch):
         batch.to(self.device)
+        batch_dict = batch.to_dict()
         self.train()
         self.optimizer.zero_grad()
-        pred = self.forward(batch)
+        pred = self.forward(batch_dict)
         loss = self.loss_fn(pred, batch)
         loss.backward()
         if self.max_grad_norm is not None:
@@ -85,7 +85,8 @@ class TrainingTask(nn.Module):
         total_loss = 0
         for batch in val_loader:
             batch.to(self.device)
-            pred = self.forward(batch)
+            batch_dict = batch.to_dict()
+            pred = self.forward(batch_dict)
             loss = self.loss_fn(pred, batch)
             total_loss += loss.item()
             self.log_metrics('val', pred, batch)

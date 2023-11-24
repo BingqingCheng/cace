@@ -167,7 +167,7 @@ class Cace(nn.Module):
         # sum over edge features to each node
         # 4-dimensional tensor: [n_nodes, radial_dim, angular_dim, embedding_dim]
         node_feat_A = scatter_sum(src=edge_attri, 
-                                  index=data.edge_index[1], 
+                                  index=data["edge_index"][1], 
                                   dim=0, 
                                   dim_size=n_nodes)
 
@@ -184,11 +184,11 @@ class Cace(nn.Module):
         # message passing
         for mp_r in self.message_radial:
             t_mp_start = time.time()
-            sender_features = node_feat_A[data.edge_index[0]]
+            sender_features = node_feat_A[data["edge_index"][0]]
             radial_decay = mp_r(edge_lengths)
             message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
             node_feat_A = node_feat_A * 0.25 + scatter_sum(src=message,
-                                    index=data.edge_index[1],
+                                    index=data["edge_index"][1],
                                     dim=0,
                                     dim_size=n_nodes) * self.mp_norm_factor
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
