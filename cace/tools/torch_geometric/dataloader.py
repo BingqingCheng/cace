@@ -7,7 +7,6 @@ from torch.utils.data.dataloader import default_collate
 from .batch import Batch
 from .data import Data
 from .dataset import Dataset
-#from cace.data import AtomicData
 
 class Collater:
     def __init__(self, follow_batch, exclude_keys):
@@ -16,7 +15,6 @@ class Collater:
 
     def __call__(self, batch):
         elem = batch[0]
-        #if isinstance(elem, AtomicData):
         if isinstance(elem, Data):
             return Batch.from_data_list(
                 batch,

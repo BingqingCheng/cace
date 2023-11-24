@@ -1,16 +1,18 @@
 import torch
 import torch.nn as nn
 import numpy as np
+from typing import Optional, List
 
 class SharedRadialLinearTransform(nn.Module):
     # TODO: this can be jitted, however, this causes trouble in saving the model
-    def __init__(self, max_l: int, radial_dim: int, random_init = True):
+    def __init__(self, max_l: int, radial_dim: int, radial_embedding_dim: Optional[int] = None, random_init = True):
         super().__init__()
         self.max_l = max_l
         self.radial_dim = radial_dim
+        self.radial_embedding_dim = radial_embedding_dim or radial_dim
         self.register_buffer('angular_dim_groups', torch.tensor(self._init_angular_dim_groups(max_l), dtype=torch.int64))
         self.random_init = random_init
-        self.weights = self._initialize_weights(radial_dim)
+        self.weights = self._initialize_weights(radial_dim, radial_embedding_dim)
 
     def __getstate__(self):
         # Return a dictionary of state items to be serialized.
@@ -22,11 +24,11 @@ class SharedRadialLinearTransform(nn.Module):
         # Restore the state.
         self.__dict__.update(state)
 
-    def _initialize_weights(self, radial_dim: int):
+    def _initialize_weights(self, radial_dim: int, embedding_dim: int) -> nn.ParameterList:
         if self.random_init:
             torch.manual_seed(0)
             return nn.ParameterList([
-                nn.Parameter(torch.rand([radial_dim, radial_dim])) for _ in self.angular_dim_groups
+                nn.Parameter(torch.rand([radial_dim, embedding_dim])) for _ in self.angular_dim_groups
             ])
         else:
             # identity
@@ -38,7 +40,8 @@ class SharedRadialLinearTransform(nn.Module):
 
         n_nodes, radial_dim, angular_dim, embedding_dim = x.shape
 
-        output = torch.zeros_like(x)
+        output = torch.zeros(n_nodes, self.radial_embedding_dim, angular_dim, embedding_dim, 
+                             device=x.device, dtype=x.dtype)
         """ this is the original code
         for index, weight in enumerate(self.weights): 
             i_start = self.angular_dim_groups[index, 0]

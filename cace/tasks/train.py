@@ -3,7 +3,6 @@ from typing import Optional, Dict, List, Type, Any
 import torch
 from torch import nn
 from .loss import GetLoss
-from ..models import AtomisticModel
 
 """
 This file contains the training loop for the neural network model.
@@ -13,14 +12,14 @@ __all__ = ['TrainingTask']
 
 class TrainingTask(nn.Module):
     def __init__(self, 
-                model: AtomisticModel,
+                model: nn.Module,
                 losses: List[GetLoss],
                 device: torch.device = torch.device('cpu'),
                 optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
                 optimizer_args: Optional[Dict[str, Any]] = None,
                 scheduler_cls: Optional[Type] = None,
                 scheduler_args: Optional[Dict[str, Any]] = None,
-                max_grad_norm: float = 100,
+                max_grad_norm: float = 10,
                 ):
         """
         Args:
@@ -65,11 +64,14 @@ class TrainingTask(nn.Module):
     def train_step(self, batch):
         batch.to(self.device)
         batch_dict = batch.to_dict()
+
         self.train()
         self.optimizer.zero_grad()
+
         pred = self.forward(batch_dict)
         loss = self.loss_fn(pred, batch)
         loss.backward()
+
         if self.max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
         self.optimizer.step()
@@ -86,6 +88,7 @@ class TrainingTask(nn.Module):
         for batch in val_loader:
             batch.to(self.device)
             batch_dict = batch.to_dict()
+
             pred = self.forward(batch_dict)
             loss = self.loss_fn(pred, batch)
             total_loss += loss.item()
