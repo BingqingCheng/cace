@@ -35,11 +35,21 @@ def load_data_loader(
             shuffle=True,
             drop_last=True,
         )
-    else:
+    elif data_type == 'valid':
         loader = torch_geometric.dataloader.DataLoader(
             dataset=[
                 AtomicData.from_config(config, cutoff=cutoff)
-                for config in collection.train
+                for config in collection.valid
+            ],
+            batch_size=batch_size,
+            shuffle=False,
+            drop_last=False,
+        )
+    elif data_type == 'test':
+        loader = torch_geometric.dataloader.DataLoader(
+            dataset=[
+                AtomicData.from_config(config, cutoff=cutoff)
+                for config in collection.test
             ],
             batch_size=batch_size,
             shuffle=False,
