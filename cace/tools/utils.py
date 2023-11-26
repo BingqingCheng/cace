@@ -51,3 +51,28 @@ def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float
         torch.cat(num_neighbors, dim=0).type(torch.get_default_dtype())
     )
     return to_numpy(avg_num_neighbors).item()
+
+def setup_logger(
+    level: Union[int, str] = logging.INFO,
+    tag: Optional[str] = None,
+    directory: Optional[str] = None,
+):
+    logger = logging.getLogger()
+    logger.setLevel(level)
+
+    formatter = logging.Formatter(
+        "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    ch = logging.StreamHandler(stream=sys.stdout)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    if (directory is not None) and (tag is not None):
+        os.makedirs(name=directory, exist_ok=True)
+        path = os.path.join(directory, tag + ".log")
+        fh = logging.FileHandler(path)
+        fh.setFormatter(formatter)
+
+        logger.addHandler(fh)

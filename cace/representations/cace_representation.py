@@ -1,13 +1,14 @@
 import time
 import torch
 from torch import nn
-from typing import Callable, Dict, Sequence
+from typing import Callable, Dict, Sequence, Optional
 
 from ..tools import elementwise_multiply_3tensors, scatter_sum
 from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
-    ExponentialDecayRBF,
+    #ExponentialDecayRBF,
+    Interaction,
     AngularComponent, 
     AngularComponent_GPU,
     SharedRadialLinearTransform,
@@ -33,6 +34,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
+        n_radial_basis: Optional[int] = None,
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
@@ -63,20 +65,27 @@ class Cace(nn.Module):
                          )
         self.edge_coding = edge_coding
         self.radial_basis = radial_basis
+        self.n_radial_basis = n_radial_basis
         self.n_radial = self.radial_basis.n_rbf
         self.cutoff_fn = cutoff_fn
         radial_transform = SharedRadialLinearTransform(
                                 max_l=self.max_l,
-                                radial_dim=self.n_radial
+                                radial_dim=self.n_radial,
+                                radial_embedding_dim=self.n_radial_basis,
                                 )
         self.radial_transform = radial_transform
         #self.radial_transform = torch.jit.script(radial_transform)
 
         # for message passing layers
         self.num_message_passing = num_message_passing
-        self.message_radial = nn.ModuleList() # list of MP radial basis functions
+        #self.message_radial = nn.ModuleList() # list of MP radial basis functions
+        #for i in range(num_message_passing):
+        #    self.message_radial.append(ExponentialDecayRBF(n_rbf=1, cutoff=cutoff, trainable=True))
+        self.message_passing = nn.ModuleList()
         for i in range(num_message_passing):
-            self.message_radial.append(ExponentialDecayRBF(n_rbf=1, cutoff=cutoff, trainable=True))
+            self.message_passing.append(
+                Interaction(cutoff=cutoff,  mp_norm_factor=self.mp_norm_factor, memory_coef=0.25, trainable=True)
+            )
 
         self.device = device
         if self.device  == torch.device("cpu"):
@@ -104,7 +113,7 @@ class Cace(nn.Module):
         #except:
         #    num_graphs = 1
         if data["batch"] == None:
-            batch_now = torch.zeros(n_nodes, dtype=torch.long, device=self.device)
+            batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=self.device)
         else:
             batch_now = data["batch"]
 
@@ -182,15 +191,22 @@ class Cace(nn.Module):
         if self.timeit: print("symmetrizer time: {}".format(t9-t8))
 
         # message passing
-        for mp_r in self.message_radial:
+        #for mp_r in self.message_radial:
+        #    t_mp_start = time.time()
+        #    sender_features = node_feat_A[data["edge_index"][0]]
+        #    radial_decay = mp_r(edge_lengths)
+        #    message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
+        #    node_feat_A = node_feat_A * 0.25 + scatter_sum(src=message,
+        #                            index=data["edge_index"][1],
+        #                            dim=0,
+        #                            dim_size=n_nodes) * self.mp_norm_factor
+        for mp in self.message_passing:
             t_mp_start = time.time()
-            sender_features = node_feat_A[data["edge_index"][0]]
-            radial_decay = mp_r(edge_lengths)
-            message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
-            node_feat_A = node_feat_A * 0.25 + scatter_sum(src=message,
-                                    index=data["edge_index"][1],
-                                    dim=0,
-                                    dim_size=n_nodes) * self.mp_norm_factor
+            node_feat_A = mp(node_feat=node_feat_A,
+                edge_lengths=edge_lengths,
+                edge_index=data["edge_index"],
+                n_nodes=n_nodes,
+                )
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
             t_mp_end = time.time()

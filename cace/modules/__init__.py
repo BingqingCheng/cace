@@ -20,4 +20,6 @@ from .atomwise import *
 
 from .forces import *
 
+from .interaction import *
+
 from .transform import *

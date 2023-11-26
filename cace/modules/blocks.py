@@ -5,7 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 
-__all__ = ["Dense", "AtomicEnergiesBlock"]
+__all__ = ["Dense", "ResidualBlock", "AtomicEnergiesBlock"]
 
 class Dense(nn.Linear):
     def __init__(
@@ -45,6 +45,37 @@ class Dense(nn.Linear):
         y = F.linear(input, self.weight, self.bias)
         y = self.activation(y)
         return y
+
+class ResidualBlock(nn.Module):
+    """
+    A residual block with two dense layers and a skip connection.
+    
+    Args:
+        in_features: Number of input features.
+        out_features: Number of output features.
+        activation: Activation function to be used in the dense layers.
+    """
+    def __init__(self, in_features, out_features, activation):
+        super().__init__()
+        # First dense layer
+        self.dense1 = Dense(in_features, out_features, activation=activation)
+        # Second dense layer
+        self.dense2 = Dense(out_features, out_features, activation=activation)
+        # Skip connection with optional dimension matching
+        self.skip = nn.Sequential(
+            Dense(in_features, out_features, activation=None),
+            nn.BatchNorm1d(out_features)
+        ) if in_features != out_features else nn.Identity()
+
+    def forward(self, x):
+        # Apply skip connection
+        identity = self.skip(x)
+        # Forward through dense layers
+        out = self.dense1(x)
+        out = self.dense2(out)
+        # Add skip connection result
+        out += identity
+        return out
 
 class AtomicEnergiesBlock(nn.Module):
     def __init__(self, nz:int, trainable=True, atomic_energies: Optional[Union[np.ndarray, torch.Tensor]]=None):
