@@ -47,7 +47,7 @@ class Forces(nn.Module):
         if self.calc_forces or self.calc_stress:
             self.required_derivatives.append('positions')
 
-    def forward(self, data: Dict[str, torch.Tensor], training: bool = True) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor], training: bool = False) -> Dict[str, torch.Tensor]:
         forces, virials, stress = get_outputs(
             energy=data[self.energy_key],
             positions=data['positions'],
