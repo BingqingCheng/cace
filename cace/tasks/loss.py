@@ -74,7 +74,7 @@ class GetLoss(nn.Module):
                 value = compute_loss_metrics(metric, pred[self.predict_name], pred[self.target_name])
             else:
                 raise ValueError("Target is None and predict_name is not equal to target_name")
-            self.metrics[subset][metric].append(value)
+            self.metrics[subset][metric].append(to_numpy(value))
 
     def clear_metric(self, subset: str):
         for metric in self.metrics[subset].keys():

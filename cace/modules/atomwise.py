@@ -73,7 +73,7 @@ class Atomwise(nn.Module):
         else:
             self.outnet = None
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor], training: bool = None) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feats']
         features = features.reshape(features.shape[0], -1)

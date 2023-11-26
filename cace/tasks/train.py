@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from .loss import GetLoss
 from ..models import AtomisticModel
+from ..tools import to_numpy
 
 """
 This file contains the training loop for the neural network model.
@@ -41,8 +42,8 @@ class TrainingTask(nn.Module):
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
-    def forward(self, data):
-        return self.model(data)
+    def forward(self, data, training: bool):
+        return self.model(data, training=training)
 
     def loss_fn(self, pred, batch):
         loss = 0.0
@@ -62,21 +63,28 @@ class TrainingTask(nn.Module):
                     torch.mean(torch.stack(metric))
                 )
 
-    def train_step(self, batch):
+    def train_step(self, batch, screen_nan: bool = True):
         batch.to(self.device)
         batch_dict = batch.to_dict()
         self.train()
         self.optimizer.zero_grad()
-        pred = self.forward(batch_dict)
+        pred = self.forward(batch_dict, training=True)
         loss = self.loss_fn(pred, batch)
         loss.backward()
         if self.max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
-        self.optimizer.step()
-        if self.scheduler:
-            self.scheduler.step()
+        normal = True
+        if screen_nan:
+            for param in self.model.parameters():
+                if param.requires_grad and not torch.isfinite(param.grad).all():
+                    normal = False
+        if normal: 
+            self.optimizer.step()
+            if self.scheduler:
+                self.scheduler.step()
         #self.log_metrics('train', pred, batch)
-        return loss.item()
+        #return loss.item()
+        return to_numpy(loss).item()
 
     def validate(self, val_loader):
         torch.set_grad_enabled(self.grad_enabled)
@@ -86,24 +94,24 @@ class TrainingTask(nn.Module):
         for batch in val_loader:
             batch.to(self.device)
             batch_dict = batch.to_dict()
-            pred = self.forward(batch_dict)
-            loss = self.loss_fn(pred, batch)
+            pred = self.forward(batch_dict, training=False)
+            loss = to_numpy(self.loss_fn(pred, batch))
             total_loss += loss.item()
             self.log_metrics('val', pred, batch)
         return total_loss / len(val_loader)
 
-    def fit(self, train_loader, val_loader, epochs):
+    def fit(self, train_loader, val_loader, epochs, val_stride: int = 1, screen_nan: bool = True):
         for epoch in range(epochs):
             total_loss = 0
             for batch in train_loader:
-                loss = self.train_step(batch)
+                loss = self.train_step(batch, screen_nan=screen_nan)
                 total_loss += loss
             avg_loss = total_loss / len(train_loader)
             #self.retrieve_metrics('train')
-
-            val_loss = self.validate(val_loader)
-            self.retrieve_metrics('val')
-            print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+            if epoch % val_stride == 0:
+                val_loss = self.validate(val_loader)
+                self.retrieve_metrics('val')
+                print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
 
     def save_model(self, path: str):
         torch.save(self.model, path)

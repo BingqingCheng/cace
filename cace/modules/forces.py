@@ -14,7 +14,6 @@ class Forces(nn.Module):
 
     def __init__(
         self,
-        training: bool = True,
         calc_forces: bool = True,
         calc_stress: bool = False,
         energy_key: str = 'CACE_energy',
@@ -31,7 +30,6 @@ class Forces(nn.Module):
             stress_key: Key of the stress in results.
         """
         super().__init__()
-        self.training = training
         self.calc_forces = calc_forces
         self.calc_stress = calc_stress
         self.energy_key = energy_key
@@ -49,11 +47,11 @@ class Forces(nn.Module):
         if self.calc_forces or self.calc_stress:
             self.required_derivatives.append('positions')
 
-    def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor], training: bool = True) -> Dict[str, torch.Tensor]:
         forces, virials, stress = get_outputs(
             energy=data[self.energy_key],
             positions=data['positions'],
-            training=self.training,
+            training=training,
             compute_force=self.calc_forces,
             compute_virials=self.calc_stress,
             compute_stress=self.calc_stress

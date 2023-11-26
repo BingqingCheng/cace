@@ -11,7 +11,7 @@ import torch
 __all__ = ["get_outputs", "get_edge_vectors_and_lengths", "get_edge_node_type"]
 
 def compute_forces(
-    energy: torch.Tensor, positions: torch.Tensor, training: bool = True
+    energy: torch.Tensor, positions: torch.Tensor, training: bool = False
 ) -> torch.Tensor:
     grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
     gradient = torch.autograd.grad(
@@ -34,7 +34,7 @@ def compute_forces_virials(
     positions: torch.Tensor,
     displacement: torch.Tensor,
     cell: torch.Tensor,
-    training: bool = True,
+    training: bool = False,
     compute_stress: bool = False,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
     grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
