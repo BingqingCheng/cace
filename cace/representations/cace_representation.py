@@ -72,6 +72,7 @@ class Cace(nn.Module):
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial,
                                 radial_embedding_dim=self.n_radial_basis,
+                                channel_dim=n_atom_basis**2
                                 )
         self.radial_transform = radial_transform
         #self.radial_transform = torch.jit.script(radial_transform)
@@ -84,7 +85,7 @@ class Cace(nn.Module):
         self.message_passing = nn.ModuleList()
         for i in range(num_message_passing):
             self.message_passing.append(
-                Interaction(cutoff=cutoff,  mp_norm_factor=self.mp_norm_factor, memory_coef=0.25, trainable=True)
+                Interaction(cutoff=cutoff, mp_norm_factor=self.mp_norm_factor, memory_coef=0.25, trainable=True)
             )
 
         self.device = device
@@ -204,6 +205,7 @@ class Cace(nn.Module):
             t_mp_start = time.time()
             node_feat_A = mp(node_feat=node_feat_A,
                 edge_lengths=edge_lengths,
+                radial_cutoff=radial_cutoff,
                 edge_index=data["edge_index"],
                 n_nodes=n_nodes,
                 )
