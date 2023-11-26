@@ -5,14 +5,14 @@ from typing import Optional, List
 
 class SharedRadialLinearTransform(nn.Module):
     # TODO: this can be jitted, however, this causes trouble in saving the model
-    def __init__(self, max_l: int, radial_dim: int, radial_embedding_dim: Optional[int] = None, random_init = True):
+    def __init__(self, max_l: int, radial_dim: int, radial_embedding_dim: Optional[int] = None, channel_dim: Optional[int] = None):
         super().__init__()
         self.max_l = max_l
         self.radial_dim = radial_dim
         self.radial_embedding_dim = radial_embedding_dim or radial_dim
+        self.channel_dim = channel_dim
         self.register_buffer('angular_dim_groups', torch.tensor(self._init_angular_dim_groups(max_l), dtype=torch.int64))
-        self.random_init = random_init
-        self.weights = self._initialize_weights(radial_dim, radial_embedding_dim)
+        self.weights = self._initialize_weights(radial_dim, self.radial_embedding_dim, channel_dim)
 
     def __getstate__(self):
         # Return a dictionary of state items to be serialized.
@@ -24,16 +24,15 @@ class SharedRadialLinearTransform(nn.Module):
         # Restore the state.
         self.__dict__.update(state)
 
-    def _initialize_weights(self, radial_dim: int, embedding_dim: int) -> nn.ParameterList:
-        if self.random_init:
-            torch.manual_seed(0)
+    def _initialize_weights(self, radial_dim: int, radial_embedding_dim: int, channel_dim: int) -> nn.ParameterList:
+        torch.manual_seed(0)
+        if channel_dim is not None:
             return nn.ParameterList([
-                nn.Parameter(torch.rand([radial_dim, embedding_dim])) for _ in self.angular_dim_groups
+                nn.Parameter(torch.rand([radial_dim, radial_embedding_dim, channel_dim])) for _ in self.angular_dim_groups
             ])
         else:
-            # identity
             return nn.ParameterList([
-                nn.Parameter(torch.eye(radial_dim)) for _ in self.angular_dim_groups
+                nn.Parameter(torch.rand([radial_dim, radial_embedding_dim])) for _ in self.angular_dim_groups
             ])
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -59,7 +58,10 @@ class SharedRadialLinearTransform(nn.Module):
             # Gather all angular dimensions for the current group
             group_x = x[:, :, group, :]  # Shape: [n_nodes, radial_dim, len(group), embedding_dim]
             # Apply the transformation for the entire group at once
-            transformed_group = torch.einsum('ijkh,jm->imkh', group_x, weight)
+            if self.channel_dim:
+                transformed_group = torch.einsum('ijkh,jmh->imkh', group_x, weight)
+            else:
+                transformed_group = torch.einsum('ijkh,jm->imkh', group_x, weight)
             # Assign to the output tensor for each angular dimension
             output[:, :, group, :] = transformed_group
         #"""
