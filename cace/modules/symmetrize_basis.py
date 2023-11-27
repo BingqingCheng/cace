@@ -132,12 +132,13 @@ class Symmetrizer(nn.Module):
                 for item in lxlylz_list:
                     prefactor = item[-1]
                     indices = [self.l_list_indices[tuple(lxlylz)] for lxlylz in item[:-1]]
-                    # somehow MPS doesn't like this, as it uses cumprod
-                    #product = torch.prod(node_attr[:, :, indices, :], dim=2)
-                    product = node_attr[:, :, indices[0], :]
-                    for idx in indices[1:]:
-                        product = product * node_attr[:, :, idx, :]
-                    sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
+                    product = torch.prod(node_attr[:, :, indices, :], dim=2)
+                    # somehow MPS doesn't like torch.prod, as it uses cumprod during autograd.
+                    # one can use the following:
+                    #product = node_attr[:, :, indices[0], :]
+                    #for idx in indices[1:]:
+                    #    product = product * node_attr[:, :, idx, :]
+                    #sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
             n_sym_node_attr += len(vec_dict)
 
         return sym_node_attr
