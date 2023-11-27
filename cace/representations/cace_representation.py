@@ -64,13 +64,15 @@ class Cace(nn.Module):
                          node_dim=self.nz, embedding_dim=self.n_atom_basis
                          )
         self.edge_coding = edge_coding
+        self.n_edge_channels = n_atom_basis**2
+
         self.radial_basis = radial_basis
-        self.n_radial_basis = n_radial_basis
-        self.n_radial = self.radial_basis.n_rbf
+        self.n_radial_func = self.radial_basis.n_rbf
+        self.n_radial_basis = n_radial_basis or self.radial_basis.n_rbf
         self.cutoff_fn = cutoff_fn
         radial_transform = SharedRadialLinearTransform(
                                 max_l=self.max_l,
-                                radial_dim=self.n_radial,
+                                radial_dim=self.n_radial_func,
                                 radial_embedding_dim=self.n_radial_basis,
                                 channel_dim=n_atom_basis**2
                                 )
@@ -85,7 +87,13 @@ class Cace(nn.Module):
         self.message_passing = nn.ModuleList()
         for i in range(num_message_passing):
             self.message_passing.append(
-                Interaction(cutoff=cutoff, mp_norm_factor=self.mp_norm_factor, memory_coef=0.25, trainable=True)
+                Interaction(
+                    cutoff=cutoff, 
+                    radial_embedding_dim=self.n_radial_basis,
+                    channel_dim=self.n_edge_channels,
+                    mp_norm_factor=self.mp_norm_factor, 
+                    memory_coef=0.25, 
+                    trainable=True)
             )
 
         self.device = device
@@ -205,9 +213,8 @@ class Cace(nn.Module):
             t_mp_start = time.time()
             node_feat_A = mp(node_feat=node_feat_A,
                 edge_lengths=edge_lengths,
-                radial_cutoff=radial_cutoff,
+                radial_cutoff_fn=radial_cutoff,
                 edge_index=data["edge_index"],
-                n_nodes=n_nodes,
                 )
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)

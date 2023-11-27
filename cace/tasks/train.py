@@ -115,4 +115,4 @@ class TrainingTask(nn.Module):
                 print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
 
     def save_model(self, path: str):
-        torch.save(self.model, path)
+        torch.save(self.model.to(torch.device("cpu")), path)

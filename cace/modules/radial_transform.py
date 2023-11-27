@@ -26,6 +26,7 @@ class SharedRadialLinearTransform(nn.Module):
 
     def _initialize_weights(self, radial_dim: int, radial_embedding_dim: int, channel_dim: int) -> nn.ParameterList:
         torch.manual_seed(0)
+        # TODO: try other initialization
         if channel_dim is not None:
             return nn.ParameterList([
                 nn.Parameter(torch.rand([radial_dim, radial_embedding_dim, channel_dim])) for _ in self.angular_dim_groups
@@ -41,16 +42,7 @@ class SharedRadialLinearTransform(nn.Module):
 
         output = torch.zeros(n_nodes, self.radial_embedding_dim, angular_dim, embedding_dim, 
                              device=x.device, dtype=x.dtype)
-        """ this is the original code
-        for index, weight in enumerate(self.weights): 
-            i_start = self.angular_dim_groups[index, 0]
-            i_end = self.angular_dim_groups[index, 1]
-            # Apply the transformation for each group
-            for ang_dim in torch.arange(i_start, i_end):
-                transformed = torch.matmul(x[:, :, ang_dim, :], weight)
-                output[:, :, ang_dim, :] = transformed
 
-        """
         for index, weight in enumerate(self.weights):
             i_start = self.angular_dim_groups[index, 0]
             i_end = self.angular_dim_groups[index, 1]
@@ -64,7 +56,6 @@ class SharedRadialLinearTransform(nn.Module):
                 transformed_group = torch.einsum('ijkh,jm->imkh', group_x, weight)
             # Assign to the output tensor for each angular dimension
             output[:, :, group, :] = transformed_group
-        #"""
         return output
 
     def _compute_length_lxlylz(self, l):
@@ -78,15 +69,3 @@ class SharedRadialLinearTransform(nn.Module):
             angular_dim_groups.append(l_list_atl)
             l_now += self._compute_length_lxlylz(l)
         return angular_dim_groups
-
-"""
-n_nodes = 10
-radial_dim = 5
-embedding_dim = 4
-A = torch.randn(n_nodes, radial_dim, 20, embedding_dim, device=device)
-transform_layer =  cace.modules.SharedRadialLinearTransform(max_l=3, radial_dim=5, random_init = False)
-A_transformed = transform_layer(A)
-
-# Check if the transformation preserves the old tensor
-print(torch.allclose(A, A_transformed))  # Should output True for the initial run
-"""
