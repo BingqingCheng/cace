@@ -177,20 +177,19 @@ class Cace(nn.Module):
         t6 = time.time()
         if self.timeit: print("elementwise_multiply_3tensors time: {}".format(t6-t5))
 
-        # mix the different radial components
-        edge_attri = self.radial_transform(edge_attri)
-        t7 = time.time()
-        if self.timeit: print("radial_transform time: {}".format(t7-t6))
-
         # sum over edge features to each node
         # 4-dimensional tensor: [n_nodes, radial_dim, angular_dim, embedding_dim]
         node_feat_A = scatter_sum(src=edge_attri, 
                                   index=data["edge_index"][1], 
                                   dim=0, 
                                   dim_size=n_nodes)
+        t7 = time.time()
+        if self.timeit: print("scatter_sum time: {}".format(t7-t6))
 
+        # mix the different radial components
+        node_feat_A = self.radial_transform(node_feat_A)
         t8 = time.time()
-        if self.timeit: print("scatter_sum time: {}".format(t8-t7))
+        if self.timeit: print("radial_transform time: {}".format(t8-t7))
 
         # symmetrized B basis
         node_feat_B = self.symmetrizer(node_attr=node_feat_A)
@@ -227,4 +226,5 @@ class Cace(nn.Module):
             "positions": data["positions"],
             "batch": batch_now,
             "node_feats": node_feats_out,
+            #"node_feats_A": node_feat_A
         }

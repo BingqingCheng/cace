@@ -138,7 +138,7 @@ class Symmetrizer(nn.Module):
                     #product = node_attr[:, :, indices[0], :]
                     #for idx in indices[1:]:
                     #    product = product * node_attr[:, :, idx, :]
-                    #sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
+                    sym_node_attr[:, :, i + n_sym_node_attr, :] += prefactor * product
             n_sym_node_attr += len(vec_dict)
 
         return sym_node_attr
