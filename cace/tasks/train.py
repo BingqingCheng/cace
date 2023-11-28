@@ -61,6 +61,7 @@ class TrainingTask(nn.Module):
                     f"{subset}_{eachloss.name}_{metric_name}",
                     torch.mean(torch.stack(metric))
                 )
+            eachloss.clear_metric(subset)
 
     def train_step(self, batch, screen_nan: bool = True):
         batch.to(self.device)

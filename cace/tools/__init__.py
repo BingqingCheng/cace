@@ -11,4 +11,7 @@ from .scatter import scatter_sum
 
 from .metric import *
 
-from .utils import compute_avg_num_neighbors
+from .utils import (
+    compute_avg_num_neighbors,
+    setup_logger,
+)
