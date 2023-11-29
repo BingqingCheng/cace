@@ -26,6 +26,7 @@ class Atomwise(nn.Module):
         aggregation_mode: str = "sum",
         output_key: str = "CACE_energy",
         per_atom_output_key: Optional[str] = None,
+        use_batchnorm: bool = False,
     ):
         """
         Args:
@@ -63,6 +64,8 @@ class Atomwise(nn.Module):
         self.activation = activation
         self.aggregation_mode = aggregation_mode
         self.residual = residual
+        self.use_batchnorm = use_batchnorm
+
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -95,6 +98,7 @@ class Atomwise(nn.Module):
                 n_layers=self.n_layers,
                 activation=self.activation,
                 residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
                 )
             self.outnet = self.outnet.to(features.device)
 
@@ -127,6 +131,7 @@ def build_mlp(
     n_layers: int = 2,
     activation: Callable = F.silu,
     residual: bool = False,
+    use_batchnorm: bool = False,
     last_bias: bool = True,
     last_zero_init: bool = False,
 ) -> nn.Module:
@@ -145,6 +150,8 @@ def build_mlp(
         activation: activation function. All hidden layers would
             the same activation function except the output layer that does not apply
             any activation function.
+        residual: whether to use residual connections between layers
+        use_batchnorm: whether to use batch normalization between layers
     """
     # get list of number of nodes in input, hidden & output layers
     if n_hidden is None:
@@ -163,12 +170,22 @@ def build_mlp(
         n_neurons = [n_in] + n_hidden + [n_out]
 
     if residual: 
+        if n_layers < 3 or n_layers % 2 == 0: 
+            raise ValueError("Residual networks require at least 3 layers and an odd number of layers")
         layers = []
-        # Create residual blocks
+        # Create residual blocks every 2 layers
         for i in range(0, n_layers - 1, 2):
             in_features = n_neurons[i]
             out_features = n_neurons[min(i + 2, len(n_neurons) - 1)]
-            layers.append(ResidualBlock(in_features, out_features, activation))
+            layers.append(
+                ResidualBlock(
+                    in_features, 
+                    out_features, 
+                    activation,
+                    skip_interval=2,
+                    use_batchnorm=use_batchnorm,
+                    )
+               )
     else:
         # assign a Dense layer (with activation function) to each hidden layer
         layers = [
@@ -186,6 +203,7 @@ def build_mlp(
                 activation=None,
                 weight_init=torch.nn.init.zeros_,
                 bias=last_bias,
+                use_batchnorm=self.use_batchnorm,
             )
         )
     else:

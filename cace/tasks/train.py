@@ -1,9 +1,9 @@
 from typing import Optional, Dict, List, Type, Any
-
+import logging
 import torch
 from torch import nn
 from .loss import GetLoss
-from ..tools import to_numpy
+from ..tools import to_numpy, tensor_dict_to_device
 
 """
 This file contains the training loop for the neural network model.
@@ -57,13 +57,18 @@ class TrainingTask(nn.Module):
     def retrieve_metrics(self, subset):
         for eachloss in self.losses:
             for metric_name, metric in eachloss.metrics[subset].items():
+                metric_now = to_numpy(torch.mean(torch.stack(metric))).item()
                 print(
-                    f"{subset}_{eachloss.name}_{metric_name}",
-                    torch.mean(torch.stack(metric))
+                    f'{subset}_{eachloss.name}_{metric_name}: {metric_now}',
+                )
+                logging.info(
+                    f'{subset}_{eachloss.name}_{metric_name}: {metric_now}',
                 )
             eachloss.clear_metric(subset)
 
     def train_step(self, batch, screen_nan: bool = True):
+        torch.set_grad_enabled(True)
+
         batch.to(self.device)
         batch_dict = batch.to_dict()
 
@@ -73,6 +78,14 @@ class TrainingTask(nn.Module):
         loss = self.loss_fn(pred, batch)
         loss.backward()
 
+        # Print gradients for debugging purposes
+        """
+        for name, param in self.model.named_parameters():
+            print(f"{name} requires grad: {param.requires_grad}")
+            if param.requires_grad:
+                print(f"Gradient of Loss w.r.t {name}: {param.grad}")
+        """
+
         if self.max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.max_grad_norm)
         normal = True
@@ -80,6 +93,7 @@ class TrainingTask(nn.Module):
             for param in self.model.parameters():
                 if param.requires_grad and not torch.isfinite(param.grad).all():
                     normal = False
+                    logging.info(f'!nan gradient!')
         if normal: 
             self.optimizer.step()
             if self.scheduler:
@@ -97,6 +111,10 @@ class TrainingTask(nn.Module):
             batch.to(self.device)
             batch_dict = batch.to_dict()
             pred = self.forward(batch_dict, training=False)
+            # MACE put both on cpus, dunno why, trying it out
+            batch = batch.cpu()
+            pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
+
             loss = to_numpy(self.loss_fn(pred, batch))
             total_loss += loss.item()
             self.log_metrics('val', pred, batch)
@@ -114,6 +132,7 @@ class TrainingTask(nn.Module):
                 val_loss = self.validate(val_loader)
                 self.retrieve_metrics('val')
                 print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+                logging.info(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
 
     def save_model(self, path: str):
         torch.save(self.model.to(torch.device("cpu")), path)

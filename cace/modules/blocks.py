@@ -7,74 +7,98 @@ import numpy as np
 
 __all__ = ["Dense", "ResidualBlock", "AtomicEnergiesBlock"]
 
-class Dense(nn.Linear):
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Union, Callable
+
+class Dense(nn.Module):
     def __init__(
         self,
         in_features: int,
         out_features: int,
         bias: bool = True,
         activation: Union[Callable, nn.Module] = nn.Identity(),
-        weight_init: Callable = nn.init.xavier_uniform_,
-        bias_init: Callable = nn.init.zeros_,
+        use_batchnorm: bool = False,
     ):
         """
-        Fully connected linear layer with an optional activation function.
+        Fully connected linear layer with an optional activation function and batch normalization.
 
         Args:
             in_features (int): Number of input features.
             out_features (int): Number of output features.
             bias (bool): If False, the layer will not have a bias term.
             activation (Callable or nn.Module): Activation function. Defaults to Identity.
-            weight_init (Callable): Function to initialize weights.
-            bias_init (Callable): Function to initialize bias.
+            use_batchnorm (bool): If True, include a batch normalization layer.
         """
-        self.weight_init = weight_init
-        self.bias_init = bias_init
-        super().__init__(in_features, out_features, bias)
+        super().__init__()
+        self.use_batchnorm = use_batchnorm
 
+        # Dense layer
+        self.linear = nn.Linear(in_features, out_features, bias)
+
+        # Activation function
         self.activation = activation
         if self.activation is None:
             self.activation = nn.Identity()
 
-    def reset_parameters(self):
-        self.weight_init(self.weight)
-        if self.bias is not None:
-            self.bias_init(self.bias)
+        # Batch normalization layer
+        if self.use_batchnorm:
+            self.batchnorm = nn.BatchNorm1d(out_features)
 
     def forward(self, input: torch.Tensor):
-        y = F.linear(input, self.weight, self.bias)
+        y = self.linear(input)
+        if self.use_batchnorm:
+            y = self.batchnorm(y)
         y = self.activation(y)
         return y
 
+
 class ResidualBlock(nn.Module):
     """
-    A residual block with two dense layers and a skip connection.
-    
+    A residual block with flexible number of dense layers, optional batch normalization, 
+    and a skip connection.
+
     Args:
         in_features: Number of input features.
         out_features: Number of output features.
         activation: Activation function to be used in the dense layers.
+        skip_interval: Number of layers between each skip connection.
+        use_batchnorm: Boolean indicating whether to use batch normalization.
     """
-    def __init__(self, in_features, out_features, activation):
+    def __init__(self, in_features, out_features, activation, skip_interval=2, use_batchnorm=True):
         super().__init__()
-        # First dense layer
-        self.dense1 = Dense(in_features, out_features, activation=activation)
-        # Second dense layer
-        self.dense2 = Dense(out_features, out_features, activation=activation)
-        # Skip connection with optional dimension matching
-        self.skip = nn.Sequential(
-            Dense(in_features, out_features, activation=None),
-            nn.BatchNorm1d(out_features)
-        ) if in_features != out_features else nn.Identity()
+        self.skip_interval = skip_interval
+        self.use_batchnorm = use_batchnorm
+        self.layers = nn.ModuleList()
+
+        # Create dense layers with optional batch normalization
+        for _ in range(skip_interval):
+            self.layers.append(Dense(in_features, out_features, activation=activation))
+            if self.use_batchnorm:
+                self.layers.append(nn.BatchNorm1d(out_features))
+            in_features = out_features  # Update in_features for the next layer
+
+        # Skip connection with optional dimension matching and batch normalization
+        if in_features != out_features:
+            skip_layers = [Dense(in_features, out_features, activation=None)]
+            if self.use_batchnorm:
+                skip_layers.append(nn.BatchNorm1d(out_features))
+            self.skip = nn.Sequential(*skip_layers)
+        else:
+            self.skip = nn.Identity()
 
     def forward(self, x):
-        # Apply skip connection
         identity = self.skip(x)
-        # Forward through dense layers
-        out = self.dense1(x)
-        out = self.dense2(out)
-        # Add skip connection result
-        out += identity
+        out = x
+
+        # Forward through dense layers with skip connections and optional batch normalization
+        for i, layer in enumerate(self.layers):
+            out = layer(out)
+            if (i + 1) % self.skip_interval == 0:
+                out += identity
+                identity = self.skip(out)
+
         return out
 
 class AtomicEnergiesBlock(nn.Module):

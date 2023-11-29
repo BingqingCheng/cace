@@ -4,6 +4,7 @@ from .torch_tools import (
     to_numpy, 
     voigt_to_matrix, 
     init_device,
+    tensor_dict_to_device,
 )
 
 
