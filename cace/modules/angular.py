@@ -89,6 +89,7 @@ class AngularComponent_GPU(nn.Module):
 
         # Compute terms using broadcasting
         # Each vector component is raised to the power of corresponding lx, ly, lz
+        # Somehow this is causing trouble on gpus when doing second order derivatives!!!
         terms = vectors_expanded ** lxlylz_expanded  # Shape: [N, M, 3]
 
         # Multiply across the last dimension (x^lx * y^ly * z^lz) for each term

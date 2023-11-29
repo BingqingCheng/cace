@@ -96,11 +96,13 @@ class Cace(nn.Module):
                     trainable=True)
             )
 
-        self.device = device
-        if self.device  == torch.device("cpu"):
-            self.angular_basis = AngularComponent(self.max_l)
-        else:
-            self.angular_basis = AngularComponent_GPU(self.max_l)
+        self.angular_basis = AngularComponent(self.max_l)
+        # The AngularComponent_GPU version sometimes has trouble with second derivatives
+        #self.device = device
+        #if self.device  == torch.device("cpu"):
+        #    self.angular_basis = AngularComponent(self.max_l)
+        #else:
+        #    self.angular_basis = AngularComponent_GPU(self.max_l)
 
         self.l_list = self.angular_basis.get_lxlylz_list()
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
@@ -199,15 +201,6 @@ class Cace(nn.Module):
         if self.timeit: print("symmetrizer time: {}".format(t9-t8))
 
         # message passing
-        #for mp_r in self.message_radial:
-        #    t_mp_start = time.time()
-        #    sender_features = node_feat_A[data["edge_index"][0]]
-        #    radial_decay = mp_r(edge_lengths)
-        #    message = sender_features * radial_decay.view(sender_features.shape[0], 1, 1, 1)
-        #    node_feat_A = node_feat_A * 0.25 + scatter_sum(src=message,
-        #                            index=data["edge_index"][1],
-        #                            dim=0,
-        #                            dim_size=n_nodes) * self.mp_norm_factor
         for mp in self.message_passing:
             t_mp_start = time.time()
             node_feat_A = mp(node_feat=node_feat_A,
