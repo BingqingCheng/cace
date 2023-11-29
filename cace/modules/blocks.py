@@ -72,13 +72,6 @@ class ResidualBlock(nn.Module):
         self.use_batchnorm = use_batchnorm
         self.layers = nn.ModuleList()
 
-        # Create dense layers with optional batch normalization
-        for _ in range(skip_interval):
-            self.layers.append(Dense(in_features, out_features, activation=activation))
-            if self.use_batchnorm:
-                self.layers.append(nn.BatchNorm1d(out_features))
-            in_features = out_features  # Update in_features for the next layer
-
         # Skip connection with optional dimension matching and batch normalization
         if in_features != out_features:
             skip_layers = [Dense(in_features, out_features, activation=None)]
@@ -87,6 +80,13 @@ class ResidualBlock(nn.Module):
             self.skip = nn.Sequential(*skip_layers)
         else:
             self.skip = nn.Identity()
+
+        # Create dense layers with optional batch normalization
+        for _ in range(skip_interval):
+            self.layers.append(Dense(in_features, out_features, activation=activation))
+            if self.use_batchnorm:
+                self.layers.append(nn.BatchNorm1d(out_features))
+            in_features = out_features  # Update in_features for the next layer
 
     def forward(self, x):
         identity = self.skip(x)
@@ -97,7 +97,6 @@ class ResidualBlock(nn.Module):
             out = layer(out)
             if (i + 1) % self.skip_interval == 0:
                 out += identity
-                identity = self.skip(out)
 
         return out
 
