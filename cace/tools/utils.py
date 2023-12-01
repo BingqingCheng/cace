@@ -2,7 +2,8 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Dict, Iterable, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, Optional, Sequence, Union, List
+from ase import Atoms
 
 import numpy as np
 import torch
@@ -57,6 +58,55 @@ def compute_avg_num_neighbors(batches: Union[torch.utils.data.DataLoader, torch_
         torch.cat(num_neighbors, dim=0).type(torch.get_default_dtype())
     )
     return to_numpy(avg_num_neighbors).item()
+
+def get_unique_atomic_number(atoms_list: List[Atoms]) -> List[int]:
+    """
+    Read a multi-frame XYZ file and return a list of unique atomic numbers
+    present across all frames.
+
+    Returns:
+    list: List of unique atomic numbers.
+    """
+    unique_atomic_numbers = set()
+
+    for atoms in atoms_list:
+        unique_atomic_numbers.update(atom.number for atom in atoms)
+
+    return list(unique_atomic_numbers)
+
+def compute_average_E0s(
+    atom_list: Atoms, zs: List[int] = None, energy_key: str = "energy"
+) -> Dict[int, float]:
+    """
+    Function to compute the average interaction energy of each chemical element
+    returns dictionary of E0s
+    """
+    len_xyz = len(atom_list)
+    if zs is None:
+        zs = get_unique_atomic_number(atom_list)
+        # sort by atomic number
+        zs.sort()
+    len_zs = len(zs)
+
+    A = np.zeros((len_xyz, len_zs))
+    B = np.zeros(len_xyz)
+    for i in range(len_xyz):
+        B[i] = atom_list[i].info[energy_key]
+        for j, z in enumerate(zs):
+            A[i, j] = np.count_nonzero(atom_list[i].get_atomic_numbers() == z)
+    try:
+        E0s = np.linalg.lstsq(A, B, rcond=None)[0]
+        atomic_energies_dict = {}
+        for i, z in enumerate(zs):
+            atomic_energies_dict[z] = E0s[i]
+    except np.linalg.LinAlgError:
+        logging.warning(
+            "Failed to compute E0s using least squares regression, using the same for all atoms"
+        )
+        atomic_energies_dict = {}
+        for i, z in enumerate(zs):
+            atomic_energies_dict[z] = 0.0
+    return atomic_energies_dict
 
 def setup_logger(
     level: Union[int, str] = logging.INFO,

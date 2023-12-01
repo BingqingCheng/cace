@@ -7,8 +7,6 @@ from .utils import (
     config_from_atoms_list,
     load_from_xyz,
     random_train_valid_split,
-    batch_to_atoms,
-    compute_average_E0s,
 )
 
 __all__ = [
@@ -20,6 +18,4 @@ __all__ = [
     "config_from_atoms",
     "config_from_atoms_list",
     "AtomicData",
-    "compute_average_E0s",
-    "batch_to_atoms"
 ]

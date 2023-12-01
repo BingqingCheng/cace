@@ -15,4 +15,8 @@ from .metric import *
 from .utils import (
     compute_avg_num_neighbors,
     setup_logger,
+    get_unique_atomic_number,
+    compute_average_E0s    
 )
+
+from .output import batch_to_atoms
