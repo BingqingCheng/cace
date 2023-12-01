@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import torch
 import ase
 import ase.data
+from ase import Atoms
 import ase.io
 import numpy as np
 from ..tools import to_numpy
@@ -259,3 +260,51 @@ def batch_to_atoms(batched_data: Dict,
         ase.io.write(output_file, atoms_list, append=True)
     return atoms_list
 
+def get_unique_atomic_number(atoms_list: List[Atoms]) -> List[int]:
+    """
+    Read a multi-frame XYZ file and return a list of unique atomic numbers
+    present across all frames.
+
+    Returns:
+    list: List of unique atomic numbers.
+    """
+    unique_atomic_numbers = set()
+
+    for atoms in atoms_list:
+        unique_atomic_numbers.update(atom.number for atom in atoms)
+
+    return list(unique_atomic_numbers)
+
+def compute_average_E0s(
+    atom_list: Atoms, zs: List[int] = None, energy_key: str = "energy"
+) -> Dict[int, float]:
+    """
+    Function to compute the average interaction energy of each chemical element
+    returns dictionary of E0s
+    """
+    len_xyz = len(atom_list)
+    if zs is None:
+        zs = get_unique_atomic_number(atom_list)
+        # sort by atomic number
+        zs.sort()
+    len_zs = len(zs)
+
+    A = np.zeros((len_xyz, len_zs))
+    B = np.zeros(len_xyz)
+    for i in range(len_xyz):
+        B[i] = atom_list[i].info[energy_key]
+        for j, z in enumerate(zs):
+            A[i, j] = np.count_nonzero(atom_list[i].get_atomic_numbers() == z)
+    try:
+        E0s = np.linalg.lstsq(A, B, rcond=None)[0]
+        atomic_energies_dict = {}
+        for i, z in enumerate(zs):
+            atomic_energies_dict[z] = E0s[i]
+    except np.linalg.LinAlgError:
+        logging.warning(
+            "Failed to compute E0s using least squares regression, using the same for all atoms"
+        )
+        atomic_energies_dict = {}
+        for i, z in enumerate(zs):
+            atomic_energies_dict[z] = 0.0
+    return atomic_energies_dict

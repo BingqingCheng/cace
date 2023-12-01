@@ -189,7 +189,7 @@ def build_mlp(
     else:
         # assign a Dense layer (with activation function) to each hidden layer
         layers = [
-            Dense(n_neurons[i], n_neurons[i + 1], activation=activation)
+            Dense(n_neurons[i], n_neurons[i + 1], activation=activation, use_batchnorm=use_batchnorm,)
             for i in range(n_layers - 1)
         ]
 
@@ -203,7 +203,6 @@ def build_mlp(
                 activation=None,
                 weight_init=torch.nn.init.zeros_,
                 bias=last_bias,
-                use_batchnorm=self.use_batchnorm,
             )
         )
     else:

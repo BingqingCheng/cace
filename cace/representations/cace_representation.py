@@ -8,7 +8,7 @@ from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
     #ExponentialDecayRBF,
-    Interaction,
+    SharedInteraction,
     AngularComponent, 
     AngularComponent_GPU,
     SharedRadialLinearTransform,
@@ -70,6 +70,7 @@ class Cace(nn.Module):
         self.n_radial_func = self.radial_basis.n_rbf
         self.n_radial_basis = n_radial_basis or self.radial_basis.n_rbf
         self.cutoff_fn = cutoff_fn
+        self.angular_basis = AngularComponent(self.max_l)
         radial_transform = SharedRadialLinearTransform(
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial_func,
@@ -87,18 +88,19 @@ class Cace(nn.Module):
         self.message_passing = nn.ModuleList()
         for i in range(num_message_passing):
             self.message_passing.append(
-                Interaction(
-                    cutoff=cutoff, 
+                SharedInteraction(
+                    cutoff=cutoff,
+                    max_l=self.max_l, 
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
-                    mp_norm_factor=self.mp_norm_factor, 
-                    memory_coef=0.25, 
-                    trainable=True)
-            )
+                    mp_norm_factor=self.mp_norm_factor,
+                    )
+                )
 
-        self.angular_basis = AngularComponent(self.max_l)
+
+        self.device = device
+
         # The AngularComponent_GPU version sometimes has trouble with second derivatives
-        #self.device = device
         #if self.device  == torch.device("cpu"):
         #    self.angular_basis = AngularComponent(self.max_l)
         #else:

@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, Optional, Sequence, Union
 import numpy as np
 import torch
 
+from . import torch_geometric
 from .torch_tools import to_numpy
 
 class AtomicNumberTable:
@@ -39,14 +40,19 @@ def atomic_numbers_to_indices(
     to_index_fn = np.vectorize(z_table.z_to_index)
     return to_index_fn(atomic_numbers)
 
-def compute_avg_num_neighbors(data_loader: torch.utils.data.DataLoader) -> float:
+def compute_avg_num_neighbors(batches: Union[torch.utils.data.DataLoader, torch_geometric.data.Data, torch_geometric.batch.Batch]) -> float:
     num_neighbors = []
 
-    for batch in data_loader:
-        _, receivers = batch.edge_index
+    if isinstance(batches, torch_geometric.data.Data) or isinstance(batches, torch_geometric.batch.Batch):
+        _, receivers = batches.edge_index
         _, counts = torch.unique(receivers, return_counts=True)
         num_neighbors.append(counts)
-
+    elif isinstance(batches, torch.utils.data.DataLoader):
+        for batch in batches:
+            _, receivers = batch.edge_index
+            _, counts = torch.unique(receivers, return_counts=True)
+            num_neighbors.append(counts)
+    
     avg_num_neighbors = torch.mean(
         torch.cat(num_neighbors, dim=0).type(torch.get_default_dtype())
     )

@@ -41,6 +41,9 @@ class TrainingTask(nn.Module):
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
+    def update_loss(self, losses: List[GetLoss]):
+        self.losses = nn.ModuleList(losses)
+
     def forward(self, data, training: bool):
         return self.model(data, training=training)
 
@@ -97,7 +100,10 @@ class TrainingTask(nn.Module):
         if normal: 
             self.optimizer.step()
             if self.scheduler:
-                self.scheduler.step()
+                if self.scheduler.__class__.__name__ == 'ReduceLROnPlateau':
+                    self.scheduler.step(loss)
+                else:
+                    self.scheduler.step()
         #self.log_metrics('train', pred, batch)
         #return loss.item()
         return to_numpy(loss).item()
@@ -120,7 +126,15 @@ class TrainingTask(nn.Module):
             self.log_metrics('val', pred, batch)
         return total_loss / len(val_loader)
 
-    def fit(self, train_loader, val_loader, epochs, val_stride: int = 1, screen_nan: bool = True):
+    def fit(self, 
+            train_loader, 
+            val_loader, 
+            epochs, 
+            val_stride: int = 1, 
+            screen_nan: bool = True,
+            checkpoint_path: Optional[str] = 'checkpoint.pt',
+           ):
+        best_val_loss = float('inf')
         for epoch in range(epochs):
             total_loss = 0
             for batch in train_loader:
@@ -133,6 +147,26 @@ class TrainingTask(nn.Module):
                 self.retrieve_metrics('val')
                 print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                self.save_model(checkpoint_path, device=self.device)
 
-    def save_model(self, path: str):
-        torch.save(self.model.to(torch.device("cpu")), path)
+    def save_model(self, path: str, device: torch.device = torch.device('cpu')):
+        torch.save(self.model.to(device), path)
+        if device != self.device:
+            self.model.to(self.device)
+
+    def checkpoint(self, path: str):
+        torch.save({
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
+        }, path)
+
+    def load_state_dict(self, state_dict):
+        self.model.load_state_dict(state_dict['model_state_dict'])
+        self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
+        if self.scheduler:
+            self.scheduler.load_state_dict(state_dict['scheduler_state_dict'])
+
+

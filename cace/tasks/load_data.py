@@ -1,5 +1,5 @@
 import dataclasses
-#import logging
+import logging
 from typing import Dict, List, Optional, Tuple
 
 from ..data import Configurations, load_from_xyz, random_train_valid_split
@@ -84,9 +84,9 @@ def get_dataset_from_xyz(
         charges_key=charges_key,
         atomic_energies=atomic_energies,
     )
-    #logging.info(
-    #    f"Loaded {len(all_train_configs)} training configurations from '{train_path}'"
-    #)
+    logging.info(
+        f"Loaded {len(all_train_configs)} training configurations from '{train_path}'"
+    )
     if valid_path is not None:
         valid_configs = load_from_xyz(
             file_path=valid_path,
@@ -99,14 +99,14 @@ def get_dataset_from_xyz(
             charges_key=charges_key,
             atomic_energies=atomic_energies,
         )
-        #logging.info(
-        #    f"Loaded {len(valid_configs)} validation configurations from '{valid_path}'"
-        #)
+        logging.info(
+            f"Loaded {len(valid_configs)} validation configurations from '{valid_path}'"
+        )
         train_configs = all_train_configs
     else:
-        #logging.info(
-        #    "Using random %s%% of training set for validation", 100 * valid_fraction
-        #)
+        logging.info(
+            "Using random %s%% of training set for validation", 100 * valid_fraction
+        )
         train_configs, valid_configs = random_train_valid_split(
             all_train_configs, valid_fraction, seed
         )
@@ -122,9 +122,9 @@ def get_dataset_from_xyz(
             charges_key=charges_key,
             atomic_energies=atomic_energies,
         )
-        #logging.info(
-        #    f"Loaded {len(all_test_configs)} test configurations from '{test_path}'"
-        #)
+        logging.info(
+            f"Loaded {len(all_test_configs)} test configurations from '{test_path}'"
+        )
     return (
         SubsetCollection(train=train_configs, valid=valid_configs, test=test_configs)
     )
