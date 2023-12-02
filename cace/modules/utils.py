@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 
 import torch
 
-__all__ = ["get_outputs", "get_edge_vectors_and_lengths", "get_edge_node_type"]
+__all__ = ["get_outputs", "get_edge_vectors_and_lengths", "get_edge_node_type", "get_symmetric_displacement"]
 
 def compute_forces(
     energy: torch.Tensor, positions: torch.Tensor, training: bool = False

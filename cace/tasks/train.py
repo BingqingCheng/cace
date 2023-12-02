@@ -21,6 +21,7 @@ class TrainingTask(nn.Module):
                 scheduler_cls: Optional[Type] = None,
                 scheduler_args: Optional[Dict[str, Any]] = None,
                 max_grad_norm: float = 10,
+                warmup_steps: int = 1,                
                 ):
         """
         Args:
@@ -38,6 +39,9 @@ class TrainingTask(nn.Module):
         self.optimizer = optimizer_cls(self.parameters(), **optimizer_args)
         self.scheduler = scheduler_cls(self.optimizer, **scheduler_args) if scheduler_cls else None
         self.max_grad_norm = max_grad_norm
+        self.warmup_steps = warmup_steps
+        self.lr = optimizer_args['lr']
+        self.global_step = 0
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
@@ -97,13 +101,14 @@ class TrainingTask(nn.Module):
                 if param.requires_grad and not torch.isfinite(param.grad).all():
                     normal = False
                     logging.info(f'!nan gradient!')
-        if normal: 
+        if normal:
+            if self.global_step < self.warmup_steps:
+                lr_scale = min(1.0, float(self.global_step) / self.warmup_steps)
+                for pg in self.optimizer.param_groups:
+                    pg["lr"] = lr_scale * self.lr
+ 
             self.optimizer.step()
-            if self.scheduler:
-                if self.scheduler.__class__.__name__ == 'ReduceLROnPlateau':
-                    self.scheduler.step(loss)
-                else:
-                    self.scheduler.step()
+
         #self.log_metrics('train', pred, batch)
         #return loss.item()
         return to_numpy(loss).item()
@@ -134,8 +139,12 @@ class TrainingTask(nn.Module):
             screen_nan: bool = True,
             checkpoint_path: Optional[str] = 'checkpoint.pt',
            ):
+
+        self.global_step = 0
         best_val_loss = float('inf')
+
         for epoch in range(epochs):
+            self.global_step += 1 
             total_loss = 0
             for batch in train_loader:
                 loss = self.train_step(batch, screen_nan=screen_nan)
@@ -146,7 +155,16 @@ class TrainingTask(nn.Module):
                 val_loss = self.validate(val_loader)
                 self.retrieve_metrics('val')
                 print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+                for pg in self.optimizer.param_groups:
+                    print("Learning rate:", pg["lr"])
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+
+            if self.scheduler:
+                if self.scheduler.__class__.__name__ == 'ReduceLROnPlateau':
+                    self.scheduler.step(val_loss)
+                else:
+                    self.scheduler.step()
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_model(checkpoint_path, device=self.device)
