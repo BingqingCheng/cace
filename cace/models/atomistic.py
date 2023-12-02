@@ -171,20 +171,16 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_outputs()
 
     def forward(self, data: Dict[str, torch.Tensor], training: bool=False) -> Dict[str, torch.Tensor]:
-        #print("nnp forward")
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
-        #print("initialize_derivatives")
 
         for m in self.input_modules:
             data = m(data)
 
         data = self.representation(data)
-        #print("representation")
 
         for m in self.output_modules:
             data = m(data, training=training)
-        #print("output_modules")
 
         # apply postprocessing (if enabled)
         data = self.postprocess(data)

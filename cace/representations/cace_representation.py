@@ -3,11 +3,11 @@ import torch
 from torch import nn
 from typing import Callable, Dict, Sequence, Optional
 
+from ..tools import torch_geometric
 from ..tools import elementwise_multiply_3tensors, scatter_sum
 from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
-    #ExponentialDecayRBF,
     SharedInteraction,
     AngularComponent, 
     AngularComponent_GPU,
@@ -82,9 +82,6 @@ class Cace(nn.Module):
 
         # for message passing layers
         self.num_message_passing = num_message_passing
-        #self.message_radial = nn.ModuleList() # list of MP radial basis functions
-        #for i in range(num_message_passing):
-        #    self.message_radial.append(ExponentialDecayRBF(n_rbf=1, cutoff=cutoff, trainable=True))
         self.message_passing = nn.ModuleList()
         for i in range(num_message_passing):
             self.message_passing.append(
@@ -116,15 +113,10 @@ class Cace(nn.Module):
         self, 
         data: Dict[str, torch.Tensor]
     ):
-        # check if all elements included in self.zs
+        # TODO: check if all elements included in self.zs
         
         # setup
-        #data["positions"].requires_grad_(True)
         n_nodes = data['positions'].shape[0]
-        #try:
-        #    num_graphs = data["ptr"].numel() - 1
-        #except:
-        #    num_graphs = 1
         if data["batch"] == None:
             batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=self.device)
         else:
@@ -142,7 +134,6 @@ class Cace(nn.Module):
 
         ## embed to a different dimension
         node_embedded = self.node_embedding(node_one_hot)
-        #node_embedded = node_one_hot
         t2 = time.time()
         if self.timeit: print("node_embedded time: {}".format(t2-t1))
 
@@ -217,8 +208,21 @@ class Cace(nn.Module):
 
         node_feats_out = torch.stack(node_feats_list, dim=-1)
 
+        # displacement is needed for computing stress/virial
+        #if isinstance(data, torch_geometric.batch.Batch):
+        #    displacement = data.to_dict().get("displacement", None)
+        #elif isinstance(data, Dict):
+        #    ddisplacement = data.get("displacement", None)
+        # or maybe
+        try:
+            displacement = data["displacement"]
+        except:
+            displacement = None
+
         return {
             "positions": data["positions"],
+            "cell": data["cell"],
+            "displacement": displacement,
             "batch": batch_now,
             "node_feats": node_feats_out,
             #"node_feats_A": node_feat_A

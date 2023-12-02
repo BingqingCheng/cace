@@ -42,7 +42,6 @@ class Forces(nn.Module):
         if calc_forces:
             self.model_outputs.append(force_key)
         if calc_stress:
-            raise NotImplementedError("Stress is not implemented yet")
             self.model_outputs.append(stress_key)
 
         self.required_derivatives = []
