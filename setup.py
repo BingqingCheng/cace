@@ -10,7 +10,8 @@ setup(
     install_requires=[
         'numpy',
         'ase',
-        'PyTorch'
+        'PyTorch',
+        'matscipy',
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
