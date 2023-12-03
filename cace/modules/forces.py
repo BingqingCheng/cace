@@ -16,7 +16,7 @@ class Forces(nn.Module):
         self,
         calc_forces: bool = True,
         calc_stress: bool = False,
-        calc_virials: bool = False,
+        #calc_virials: bool = False,
         energy_key: str = 'CACE_energy',
         force_key: str = 'CACE_forces',
         stress_key: str = 'CACE_stress',
@@ -33,7 +33,7 @@ class Forces(nn.Module):
         super().__init__()
         self.calc_forces = calc_forces
         self.calc_stress = calc_stress
-        self.calc_virials = calc_virials
+        #self.calc_virials = calc_virials
         self.energy_key = energy_key
         self.force_key = force_key
         self.stress_key = stress_key
@@ -56,7 +56,7 @@ class Forces(nn.Module):
             cell=data.get('cell', None),
             training=training,
             compute_force=self.calc_forces,
-            compute_virials=self.calc_virials,
+            #compute_virials=self.calc_virials,
             compute_stress=self.calc_stress
             )
 

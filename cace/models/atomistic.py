@@ -170,12 +170,17 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_derivatives()
         self.collect_outputs()
 
-    def forward(self, data: Dict[str, torch.Tensor], training: bool=False) -> Dict[str, torch.Tensor]:
+    def forward(self, 
+                data: Dict[str, torch.Tensor], 
+                training: bool=False, 
+                compute_stress: bool = False, 
+                compute_virials: bool = False
+                ) -> Dict[str, torch.Tensor]:
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
 
         for m in self.input_modules:
-            data = m(data)
+            data = m(data, compute_stress=compute_stress, compute_virials=compute_virials)
 
         data = self.representation(data)
 

@@ -9,19 +9,17 @@ from .utils import get_symmetric_displacement
 __all__ = ["Preprocess"]
 
 class Preprocess(nn.Module): 
-    def __init__(self, compute_stress: bool = False, compute_virials: bool = False): 
+    def __init__(self): 
         super().__init__()
-        self.compute_stress = compute_stress
-        self.compute_virials = compute_virials
 
-    def forward(self, data: Dict[str, torch.Tensor]): 
+    def forward(self, data: Dict[str, torch.Tensor], compute_stress: bool = False, compute_virials: bool = False): 
 
         try:
             num_graphs = data["ptr"].numel() - 1
         except:
             num_graphs = 1
 
-        if self.compute_virials or self.compute_stress:
+        if compute_virials or compute_stress:
             (
                 data["positions"],
                 data["shifts"],
