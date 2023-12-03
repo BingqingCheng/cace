@@ -123,7 +123,7 @@ def get_dataset_from_xyz(
             atomic_energies=atomic_energies,
         )
         logging.info(
-            f"Loaded {len(all_test_configs)} test configurations from '{test_path}'"
+            f"Loaded {len(test_configs)} test configurations from '{test_path}'"
         )
     return (
         SubsetCollection(train=train_configs, valid=valid_configs, test=test_configs)

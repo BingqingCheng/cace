@@ -3,6 +3,7 @@ import logging
 import torch
 from torch import nn
 from .loss import GetLoss
+from ..tools import Metrics
 from ..tools import to_numpy, tensor_dict_to_device
 
 """
@@ -15,6 +16,7 @@ class TrainingTask(nn.Module):
     def __init__(self, 
                 model: nn.Module,
                 losses: List[GetLoss],
+                metrics: List[Metrics],
                 device: torch.device = torch.device('cpu'),
                 optimizer_cls: Type[torch.optim.Optimizer] = torch.optim.Adam,
                 optimizer_args: Optional[Dict[str, Any]] = None,
@@ -36,6 +38,7 @@ class TrainingTask(nn.Module):
         self.device = device
         self.model = model.to(self.device)
         self.losses = nn.ModuleList(losses)
+        self.metrics = nn.ModuleList(metrics)
         self.optimizer = optimizer_cls(self.parameters(), **optimizer_args)
         self.scheduler = scheduler_cls(self.optimizer, **scheduler_args) if scheduler_cls else None
         self.max_grad_norm = max_grad_norm
@@ -58,20 +61,13 @@ class TrainingTask(nn.Module):
         return loss
 
     def log_metrics(self, subset, pred, batch):
-        for eachloss in self.losses:
-            eachloss.update_metrics(subset, pred, batch)
+        for metric in self.metrics:
+            metric.update_metrics(subset, pred, batch)
 
     def retrieve_metrics(self, subset):
-        for eachloss in self.losses:
-            for metric_name, metric in eachloss.metrics[subset].items():
-                metric_now = to_numpy(torch.mean(torch.stack(metric))).item()
-                print(
-                    f'{subset}_{eachloss.name}_{metric_name}: {metric_now}',
-                )
-                logging.info(
-                    f'{subset}_{eachloss.name}_{metric_name}: {metric_now}',
-                )
-            eachloss.clear_metric(subset)
+        for metric in self.metrics:
+            metric.retrieve_metrics(subset)
+            metric.clear_metrics(subset)
 
     def train_step(self, batch, screen_nan: bool = True):
         torch.set_grad_enabled(True)
