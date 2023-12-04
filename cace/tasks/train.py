@@ -22,8 +22,11 @@ class TrainingTask(nn.Module):
                 optimizer_args: Optional[Dict[str, Any]] = None,
                 scheduler_cls: Optional[Type] = None,
                 scheduler_args: Optional[Dict[str, Any]] = None,
+                ema: bool = False, 
+                ema_decay: float = 0.99,
+                ema_start: int = 0,
                 max_grad_norm: float = 10,
-                warmup_steps: int = 1,                
+                warmup_steps: int = 0,                
                 ):
         """
         Args:
@@ -41,6 +44,13 @@ class TrainingTask(nn.Module):
         self.metrics = nn.ModuleList(metrics)
         self.optimizer = optimizer_cls(self.parameters(), **optimizer_args)
         self.scheduler = scheduler_cls(self.optimizer, **scheduler_args) if scheduler_cls else None
+        self.ema = ema
+        self.ema_start = ema_start
+        if self.ema:
+            self.ema_model = torch.optim.swa_utils.AveragedModel(self.model, \
+                multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(ema_decay))
+        else:
+            self.ema_model = None
         self.max_grad_norm = max_grad_norm
         self.warmup_steps = warmup_steps
         self.lr = optimizer_args['lr']
@@ -77,7 +87,7 @@ class TrainingTask(nn.Module):
 
         self.train()
         self.optimizer.zero_grad()
-        pred = self.forward(batch_dict, training=True)
+        pred = self.model(batch_dict, training=True)
         loss = self.loss_fn(pred, batch)
         loss.backward()
 
@@ -99,11 +109,13 @@ class TrainingTask(nn.Module):
                     logging.info(f'!nan gradient!')
         if normal:
             if self.global_step < self.warmup_steps:
-                lr_scale = min(1.0, float(self.global_step) / self.warmup_steps)
+                lr_scale = min(1.0, float(self.global_step + 1) / self.warmup_steps)
                 for pg in self.optimizer.param_groups:
                     pg["lr"] = lr_scale * self.lr
  
             self.optimizer.step()
+            if self.ema and self.global_step >= self.ema_start:
+                self.ema_model.update_parameters(self.model)
 
         #self.log_metrics('train', pred, batch)
         #return loss.item()
@@ -117,7 +129,10 @@ class TrainingTask(nn.Module):
         for batch in val_loader:
             batch.to(self.device)
             batch_dict = batch.to_dict()
-            pred = self.forward(batch_dict, training=False)
+            if self.ema and self.global_step >= self.ema_start:
+                pred = self.ema_model(batch_dict, training=False)
+            else:
+                pred = self.model(batch_dict, training=False)
             # MACE put both on cpus, dunno why, trying it out
             batch = batch.cpu()
             pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
@@ -136,11 +151,9 @@ class TrainingTask(nn.Module):
             checkpoint_path: Optional[str] = 'checkpoint.pt',
            ):
 
-        self.global_step = 0
         best_val_loss = float('inf')
 
         for epoch in range(epochs):
-            self.global_step += 1 
             total_loss = 0
             for batch in train_loader:
                 loss = self.train_step(batch, screen_nan=screen_nan)
@@ -152,7 +165,7 @@ class TrainingTask(nn.Module):
                 self.retrieve_metrics('val')
                 print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
                 for pg in self.optimizer.param_groups:
-                    print("Learning rate:", pg["lr"])
+                    print("Step:", self.global_step, ", Learning rate:", pg["lr"])
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
 
             if self.scheduler:
@@ -164,21 +177,30 @@ class TrainingTask(nn.Module):
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_model(checkpoint_path, device=self.device)
+            self.global_step += 1 
 
     def save_model(self, path: str, device: torch.device = torch.device('cpu')):
-        torch.save(self.model.to(device), path)
-        if device != self.device:
-            self.model.to(self.device)
+        if self.ema and self.global_step >= self.ema_start: 
+            torch.save(self.ema_model.module.to(device), path)
+            if device != self.device:
+                self.ema_model.module.to(self.device)
+        else:
+            torch.save(self.model.to(device), path)
+            if device != self.device:
+                self.model.to(self.device)
 
     def checkpoint(self, path: str):
         torch.save({
             'model_state_dict': self.model.state_dict(),
+            'model_ema_state_dict': self.ema_model.state_dict() if self.ema and self.global_step >= self.ema_start else None,
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
         }, path)
 
     def load_state_dict(self, state_dict):
         self.model.load_state_dict(state_dict['model_state_dict'])
+        if self.ema:
+            self.ema_model.load_state_dict(state_dict['model_ema_state_dict'])
         self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
         if self.scheduler:
             self.scheduler.load_state_dict(state_dict['scheduler_state_dict'])
