@@ -87,10 +87,10 @@ class Metrics(nn.Module):
         for metric_name, metric in self.metrics[subset].items():
             metric_now = to_numpy(torch.mean(torch.stack(metric))).item()
             print(
-                f'{subset}_{self.name}_{metric_name}: {metric_now}',
+                f'{subset}_{self.name}_{metric_name}: {metric_now:.4f}',
             )
             logging.info(
-                f'{subset}_{self.name}_{metric_name}: {metric_now}',
+                f'{subset}_{self.name}_{metric_name}: {metric_now:.4f}',
             )
 
     def clear_metrics(self, subset: str):

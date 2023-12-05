@@ -22,8 +22,15 @@ class TrainingTask(nn.Module):
                 optimizer_args: Optional[Dict[str, Any]] = None,
                 scheduler_cls: Optional[Type] = None,
                 scheduler_args: Optional[Dict[str, Any]] = None,
+                ema: bool = False, 
+                ema_decay: float = 0.99,
+                ema_start: int = 0,
+                swa: bool = False,
+                swa_start: int = 0,
+                swa_lr: float = 1e-3,
+                swa_losses: List[GetLoss] = [],
                 max_grad_norm: float = 10,
-                warmup_steps: int = 1,                
+                warmup_steps: int = 0,                
                 ):
         """
         Args:
@@ -41,6 +48,27 @@ class TrainingTask(nn.Module):
         self.metrics = nn.ModuleList(metrics)
         self.optimizer = optimizer_cls(self.parameters(), **optimizer_args)
         self.scheduler = scheduler_cls(self.optimizer, **scheduler_args) if scheduler_cls else None
+        self.ema = ema
+        self.ema_start = ema_start
+        if self.ema:
+            # AveragedModel is kinda new in torch so there's a fall back
+            try:
+                self.ema_model = torch.optim.swa_utils.AveragedModel(self.model, \
+                    multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(ema_decay))
+            except:
+                ema_avg = lambda averaged_model_parameter, model_parameter, num_averaged: \
+                    ema_decay * averaged_model_parameter + (1-ema_decay) * model_parameter
+                self.ema_model = torch.optim.swa_utils.AveragedModel(model, avg_fn=ema_avg)
+        else:
+            self.ema_model = None
+
+        self.swa = swa
+        self.swa_start = swa_start
+        self.swa_lr = swa_lr
+        self.swa_model = None
+        self.swa_scheduler = None
+        self.swa_losses_list = swa_losses
+
         self.max_grad_norm = max_grad_norm
         self.warmup_steps = warmup_steps
         self.lr = optimizer_args['lr']
@@ -77,7 +105,7 @@ class TrainingTask(nn.Module):
 
         self.train()
         self.optimizer.zero_grad()
-        pred = self.forward(batch_dict, training=True)
+        pred = self.model(batch_dict, training=True)
         loss = self.loss_fn(pred, batch)
         loss.backward()
 
@@ -99,13 +127,14 @@ class TrainingTask(nn.Module):
                     logging.info(f'!nan gradient!')
         if normal:
             if self.global_step < self.warmup_steps:
-                lr_scale = min(1.0, float(self.global_step) / self.warmup_steps)
+                lr_scale = min(1.0, float(self.global_step + 1) / self.warmup_steps)
                 for pg in self.optimizer.param_groups:
                     pg["lr"] = lr_scale * self.lr
  
             self.optimizer.step()
+            if self.ema and self.global_step >= self.ema_start:
+                self.ema_model.update_parameters(self.model)
 
-        #self.log_metrics('train', pred, batch)
         #return loss.item()
         return to_numpy(loss).item()
 
@@ -113,11 +142,14 @@ class TrainingTask(nn.Module):
         torch.set_grad_enabled(self.grad_enabled)
         
         self.eval()
-        total_loss = 0
+        total_loss = 0.0
         for batch in val_loader:
             batch.to(self.device)
             batch_dict = batch.to_dict()
-            pred = self.forward(batch_dict, training=False)
+            if self.ema and self.global_step >= self.ema_start:
+                pred = self.ema_model(batch_dict, training=False)
+            else:
+                pred = self.model(batch_dict, training=False)
             # MACE put both on cpus, dunno why, trying it out
             batch = batch.cpu()
             pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
@@ -125,6 +157,7 @@ class TrainingTask(nn.Module):
             loss = to_numpy(self.loss_fn(pred, batch))
             total_loss += loss.item()
             self.log_metrics('val', pred, batch)
+
         return total_loss / len(val_loader)
 
     def fit(self, 
@@ -136,26 +169,45 @@ class TrainingTask(nn.Module):
             checkpoint_path: Optional[str] = 'checkpoint.pt',
            ):
 
-        self.global_step = 0
         best_val_loss = float('inf')
 
         for epoch in range(epochs):
-            self.global_step += 1 
+
+            # start SWA if needed
+            if self.swa and self.global_step >= self.swa_start:
+                if self.swa_model is None:
+                    logging.info('SWA started:')
+                    if self.ema_model is not None:
+                        self.swa_model = torch.optim.swa_utils.AveragedModel(self.ema_model.module)
+                    else:
+                        self.swa_model = torch.optim.swa_utils.AveragedModel(self.model)
+                    self.swa_scheduler = torch.optim.swa_utils.SWALR(self.optimizer, swa_lr=self.swa_lr)
+                    if len(self.swa_losses_list) > 0:
+                        self.update_loss(self.swa_losses_list)
+
+            # train
             total_loss = 0
             for batch in train_loader:
                 loss = self.train_step(batch, screen_nan=screen_nan)
                 total_loss += loss
             avg_loss = total_loss / len(train_loader)
-            #self.retrieve_metrics('train')
+
+            if self.swa and self.global_step >= self.swa_start:
+               self.swa_model.update_parameters(self.model)
+
+            # validate
             if epoch % val_stride == 0:
                 val_loss = self.validate(val_loader)
-                self.retrieve_metrics('val')
-                print(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
                 for pg in self.optimizer.param_groups:
-                    print("Learning rate:", pg["lr"])
-                logging.info(f'Epoch {epoch}, Train Loss: {avg_loss}, Val Loss: {val_loss}')
+                    lr_now = pg["lr"]
+                    print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
+                print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
+                logging.info(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
+                self.retrieve_metrics('val')
 
-            if self.scheduler:
+            if self.swa and self.global_step >= self.swa_start:
+               self.swa_scheduler.step()
+            elif self.scheduler:
                 if self.scheduler.__class__.__name__ == 'ReduceLROnPlateau':
                     self.scheduler.step(val_loss)
                 else:
@@ -164,21 +216,31 @@ class TrainingTask(nn.Module):
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_model(checkpoint_path, device=self.device)
+            self.global_step += 1 
 
     def save_model(self, path: str, device: torch.device = torch.device('cpu')):
-        torch.save(self.model.to(device), path)
-        if device != self.device:
-            self.model.to(self.device)
+        if self.ema and self.global_step >= self.ema_start: 
+            torch.save(self.ema_model.module.to(device), path)
+            if device != self.device:
+                self.ema_model.module.to(self.device)
+        else:
+            torch.save(self.model.to(device), path)
+            if device != self.device:
+                self.model.to(self.device)
 
     def checkpoint(self, path: str):
         torch.save({
             'model_state_dict': self.model.state_dict(),
+            'model_ema_state_dict': self.ema_model.state_dict() if self.ema and self.global_step >= self.ema_start else None,
+            'model_swa_state_dict': self.swa_model.state_dict() if self.swa and self.global_step >= self.swa_start else None,
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
         }, path)
 
     def load_state_dict(self, state_dict):
         self.model.load_state_dict(state_dict['model_state_dict'])
+        if self.ema:
+            self.ema_model.load_state_dict(state_dict['model_ema_state_dict'])
         self.optimizer.load_state_dict(state_dict['optimizer_state_dict'])
         if self.scheduler:
             self.scheduler.load_state_dict(state_dict['scheduler_state_dict'])
