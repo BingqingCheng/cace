@@ -24,7 +24,7 @@ class Atomwise(nn.Module):
         activation: Callable = F.silu,
         residual: bool = False,
         aggregation_mode: str = "sum",
-        output_key: str = "CACE_energy",
+        output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
         use_batchnorm: bool = False,
     ):

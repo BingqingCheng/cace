@@ -26,6 +26,10 @@ class CACECalculator(Calculator):
         device: str,
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
+        compute_stress = False,
+        energy_key: str = 'energy',
+        forces_key: str = 'forces',
+        stress_key: str = 'stress',
         **kwargs,
         ):
 
@@ -47,6 +51,11 @@ class CACECalculator(Calculator):
 
         self.cutoff = self.model.representation.cutoff
 
+        self.compute_stress = compute_stress
+        self.energy_key = energy_key 
+        self.forces_key = forces_key
+        self.stress_key = stress_key
+        
         for param in self.model.parameters():
             param.requires_grad = False
 
@@ -74,13 +83,12 @@ class CACECalculator(Calculator):
             drop_last=False,
         )
 
-        compute_stress = False
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
-        out = self.model(batch.to_dict(), compute_stress=compute_stress)
-        self.results["energy"] = to_numpy(out["CACE_energy"]) * self.energy_units_to_eV
-        self.results["forces"] = to_numpy(out["CACE_forces"]) * self.energy_units_to_eV / self.length_units_to_A
-        if compute_stress and out["stress"] is not None:
-            self.results["stress"] = full_3x3_to_voigt_6_stress(to_numpy(out["CACE_stress"])) * self.energy_units_to_eV / self.length_units_to_A**3
+        output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress)
+        self.results["energy"] = to_numpy(output[self.energy_key]) * self.energy_units_to_eV
+        self.results["forces"] = to_numpy(output[self.forces_key]) * self.energy_units_to_eV / self.length_units_to_A
+        if self.compute_stress and output["stress"] is not None:
+            self.results["stress"] = full_3x3_to_voigt_6_stress(to_numpy(output[self.stress_key])) * self.energy_units_to_eV / self.length_units_to_A**3
 
         return self.results

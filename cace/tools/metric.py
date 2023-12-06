@@ -30,24 +30,23 @@ class Metrics(nn.Module):
 
     def __init__(
         self,
-        predict_name: str,
+        target_name: str,
+        predict_name: Optional[str] = None,
         name: Optional[str] = None,
-        target_name: Optional[str] = None,
         metrics: Dict[str, list] = {"mae": [], "rmse": []},
         per_atom: bool = False,
     ):
         """
         Args:
-            name: name of output in results dict
-            target_property: Name of target in training batch. Only required for supervised training.
-                If not given, the output name is assumed to also be the target name.
+            target_name: Name of target in training batch. 
+            name: name of the metric object
             loss_fn: function to compute the loss
             loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
         """
         super().__init__()
-        self.predict_name = predict_name
-        self.target_name = target_name or predict_name
-        self.name = name or predict_name
+        self.target_name = target_name
+        self.predict_name = predict_name or target_name
+        self.name = name or target_name
 
         self.per_atom = per_atom
 

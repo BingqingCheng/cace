@@ -17,17 +17,17 @@ class Forces(nn.Module):
         calc_forces: bool = True,
         calc_stress: bool = False,
         #calc_virials: bool = False,
-        energy_key: str = 'CACE_energy',
-        force_key: str = 'CACE_forces',
-        stress_key: str = 'CACE_stress',
-        virials_key: str = 'CACE_virials',
+        energy_key: str = 'energy',
+        forces_key: str = 'forces',
+        stress_key: str = 'stress',
+        virials_key: str = 'virials',
     ):
         """
         Args:
             calc_forces: If True, calculate atomic forces.
             calc_stress: If True, calculate the stress tensor.
             energy_key: Key of the energy in results.
-            force_key: Key of the forces in results.
+            forces_key: Key of the forces in results.
             stress_key: Key of the stress in results.
         """
         super().__init__()
@@ -35,12 +35,12 @@ class Forces(nn.Module):
         self.calc_stress = calc_stress
         #self.calc_virials = calc_virials
         self.energy_key = energy_key
-        self.force_key = force_key
+        self.forces_key = forces_key
         self.stress_key = stress_key
         self.virial_key = virials_key
         self.model_outputs = []
         if calc_forces:
-            self.model_outputs.append(force_key)
+            self.model_outputs.append(forces_key)
         if calc_stress:
             self.model_outputs.append(stress_key)
 
@@ -60,7 +60,7 @@ class Forces(nn.Module):
             compute_stress=self.calc_stress
             )
 
-        data[self.force_key] = forces
+        data[self.forces_key] = forces
         if self.virial_key is not None:
             data[self.virial_key] = virials
         if self.stress_key is not None:

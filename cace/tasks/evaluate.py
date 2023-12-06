@@ -24,6 +24,9 @@ class EvaluateTask(nn.Module):
         device: str = "cpu",
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
+        energy_key: str = 'energy',
+        forces_key: str = 'forces',
+        stress_key: str = 'stress',
         ):
 
         super().__init__()
@@ -33,6 +36,9 @@ class EvaluateTask(nn.Module):
 
         self.device = torch_tools.init_device(device)
         self.cutoff = self.model.representation.cutoff
+        self.energy_key = energy_key
+        self.forces_key = forces_key
+        self.stress_key = stress_key
         
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
@@ -55,13 +61,16 @@ class EvaluateTask(nn.Module):
         if isinstance(data, torch_geometric.batch.Batch):
             data.to(self.device)
             output = self.model(data.to_dict())
-            energies_list.append(to_numpy(output["CACE_energy"]))
+            energies_list.append(to_numpy(output[self.energy_key]))
             forces = np.split(
-                torch_tools.to_numpy(output["CACE_forces"]),
+                torch_tools.to_numpy(output[self.forces_key]),
                 indices_or_sections=data.ptr[1:],
                 axis=0,
             )
             forces_list.append(forces[:-1])
+            if compute_stress and self.stress_key in output:
+                stresses_list.append(to_numpy(output[self.stress_key]))
+
         elif isinstance(data, Atoms):
             config = config_from_atoms(data)
             data_loader = torch_geometric.dataloader.DataLoader(
@@ -75,8 +84,11 @@ class EvaluateTask(nn.Module):
                 drop_last=False,
             )
             output = self.model(next(iter(data_loader)).to_dict())
-            energies_list.append(to_numpy(output["CACE_energy"]))
-            forces_list.append(to_numpy(output["CACE_forces"]))
+            energies_list.append(to_numpy(output[self.energy_key]))
+            forces_list.append(to_numpy(output[self.forces_key]))
+            if compute_stress and self.stress_key in output:
+                stresses_list.append(to_numpy(output[self.stress_key]))
+
         # check if the data is a list of atoms
         elif isinstance(data, list):
             if not isinstance(data[0], Atoms):
@@ -96,29 +108,35 @@ class EvaluateTask(nn.Module):
             for batch in data_loader:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
-                energies_list.append(to_numpy(output["CACE_energy"]))
+                energies_list.append(to_numpy(output[self.energy_key]))
                 forces = np.split(
-                    to_numpy(output["CACE_forces"]),
+                    to_numpy(output[self.forces_key]),
                     indices_or_sections=batch.ptr[1:],
                     axis=0,
                 )
                 forces_list.append(forces[:-1])
+            if compute_stress and self.stress_key in output:
+                stresses_list.append(to_numpy(output[self.stress_key]))
+
         elif isinstance(data, torch_geometric.dataloader.DataLoader):
             for batch in data:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
-                energies_list.append(to_numpy(output["CACE_energy"]))
+                energies_list.append(to_numpy(output[self.energy_key]))
                 forces = np.split(
-                    torch_tools.to_numpy(output["CACE_forces"]),
+                    torch_tools.to_numpy(output[self.forces_key]),
                     indices_or_sections=batch.ptr[1:],
                     axis=0,
                 )
                 forces_list.append(forces[:-1])
+            if compute_stress and self.stress_key in output:
+                stresses_list.append(to_numpy(output[self.stress_key]))
         else:
             raise ValueError("Input data type not recognized")
 
         results = {
             "energy": np.concatenate(energies_list) * self.energy_units_to_eV,
             "forces": np.concatenate(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
+            "stress": None if len(stresses_list) == 0 else np.concatenate(stresses_list) * self.energy_units_to_eV / self.length_units_to_A ** 3,
 	}
         return results
