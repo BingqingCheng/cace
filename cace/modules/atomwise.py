@@ -22,11 +22,12 @@ class Atomwise(nn.Module):
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
         activation: Callable = F.silu,
-        residual: bool = False,
         aggregation_mode: str = "sum",
         output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
+        residual: bool = False,
         use_batchnorm: bool = False,
+        add_linear_nn: bool = False,
     ):
         """
         Args:
@@ -41,6 +42,9 @@ class Atomwise(nn.Module):
             aggregation_mode: one of {sum, avg} (default: sum)
             output_key: the key under which the result will be stored
             per_atom_output_key: If not None, the key under which the per-atom result will be stored
+            residual: whether to use residual connections between layers
+            use_batchnorm: whether to use batch normalization between layers
+            add_linear_nn: whether to add a linear NN to the output of the MLP 
         """
         super().__init__()
         self.output_key = output_key
@@ -65,7 +69,7 @@ class Atomwise(nn.Module):
         self.aggregation_mode = aggregation_mode
         self.residual = residual
         self.use_batchnorm = use_batchnorm
-
+        self.add_linear_nn = add_linear_nn
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -74,9 +78,19 @@ class Atomwise(nn.Module):
                 n_hidden=self.n_hidden,
                 n_layers=self.n_layers,
                 activation=self.activation,
-                residual=residual,
+                residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
                 )
             self.outnet = self.outnet.to(features.device)
+            if self.add_linear_nn:
+                self.linear_nn = Dense(
+                   self.n_in, 
+                   self.n_out,
+                   bias=True, 
+                   activation=None, 
+                   use_batchnorm=self.use_batchnorm,
+                   ) 
+
         else:
             self.outnet = None
 
@@ -101,9 +115,22 @@ class Atomwise(nn.Module):
                 use_batchnorm=self.use_batchnorm,
                 )
             self.outnet = self.outnet.to(features.device)
+            if self.add_linear_nn:
+                self.linear_nn = Dense(
+                   self.n_in,
+                   self.n_out,
+                   bias=True,
+                   activation=None,
+                   use_batchnorm=self.use_batchnorm,
+                   )
+                self.linear_nn = self.linear_nn.to(features.device)
+            else:
+                self.linear_nn = None
 
         # predict atomwise contributions
         y = self.outnet(features)
+        if self.linear_nn is not None:
+            y += self.linear_nn(features)
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
