@@ -82,10 +82,10 @@ class TrainingTask(nn.Module):
     def forward(self, data, training: bool):
         return self.model(data, training=training)
 
-    def loss_fn(self, pred, batch):
+    def loss_fn(self, pred, batch, loss_args: Optional[Dict[str, torch.Tensor]] = None):
         loss = 0.0
         for eachloss in self.losses:
-            loss += eachloss.calculate_loss(pred, batch)
+            loss += eachloss(pred, batch, loss_args)
         return loss
 
     def log_metrics(self, subset, pred, batch):
@@ -106,7 +106,7 @@ class TrainingTask(nn.Module):
         self.train()
         self.optimizer.zero_grad()
         pred = self.model(batch_dict, training=True)
-        loss = self.loss_fn(pred, batch)
+        loss = self.loss_fn(pred, batch, {'epochs': self.global_step, 'training': True})
         loss.backward()
 
         # Print gradients for debugging purposes
@@ -154,7 +154,7 @@ class TrainingTask(nn.Module):
             batch = batch.cpu()
             pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
 
-            loss = to_numpy(self.loss_fn(pred, batch))
+            loss = to_numpy(self.loss_fn(pred, batch, {'epochs': self.global_step, 'training': False}))
             total_loss += loss.item()
             self.log_metrics('val', pred, batch)
 

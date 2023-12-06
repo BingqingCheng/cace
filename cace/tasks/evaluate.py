@@ -84,7 +84,12 @@ class EvaluateTask(nn.Module):
                 drop_last=False,
             )
             output = self.model(next(iter(data_loader)).to_dict())
-            energies_list.append(to_numpy(output[self.energy_key]))
+            energy = to_numpy(output[self.energy_key])
+            # TODO: subtract atomic energies if available
+            #if self.atomic_energies is not None:
+            #    atomic_numbers = data.get_atomic_numbers()
+            #    energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
+            energies_list.append(energy)
             forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
