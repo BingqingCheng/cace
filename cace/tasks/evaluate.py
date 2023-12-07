@@ -16,6 +16,9 @@ class EvaluateTask(nn.Module):
         device: str, device to run on (cuda or cpu)
         energy_units_to_eV: float, conversion factor from model energy units to eV
         length_units_to_A: float, conversion factor from model length units to Angstroms
+        energy_key: str, name of energy key in model output
+        forces_key: str, name of forces key in model output
+        stress_key: str, name of stress key in model output
     """
 
     def __init__(
@@ -49,8 +52,10 @@ class EvaluateTask(nn.Module):
     def forward(self, data=None, batch_size=1, compute_stress=False):
         """
         Calculate properties.
-        :param atoms: ase.Atoms object
-        :return:
+        args:
+             data: torch_geometric.data.Data, torch_geometric.data.Batch, list of ASE Atoms objects, or torch_geometric.data.DataLoader
+             batch_size: int, batch size
+             compute_stress: bool, whether to compute stress
         """
         # Collect data
         energies_list = []

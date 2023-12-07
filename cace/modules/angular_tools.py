@@ -59,7 +59,13 @@ def find_combo_vectors_nu2(l_max):
             vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2]))
             prefactors.append(prefactor)
 
-    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
+    if not vectors:
+        # Return an empty tensor
+        stacked_vectors = torch.tensor([])
+    else:
+        stacked_vectors = torch.stack(vectors)
+
+    return vec_dict, stacked_vectors, torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 def find_combo_vectors_nu3(l_max):
     vector_groups = []
@@ -96,8 +102,14 @@ def find_combo_vectors_nu3(l_max):
             lxlylz_tensor3 = torch.tensor(lxlylz_now3, dtype=torch.int64)
             vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2, lxlylz_tensor3]))
             prefactors.append(prefactor)
-            
-    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
+           
+    if not vectors:
+        # Return an empty tensor
+        stacked_vectors = torch.tensor([])
+    else:
+        stacked_vectors = torch.stack(vectors)
+ 
+    return vec_dict, stacked_vectors, torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 def find_combo_vectors_nu4(l_max):
     vector_groups = []
@@ -141,8 +153,14 @@ def find_combo_vectors_nu4(l_max):
             lxlylz_tensor4 = torch.tensor(lxlylz_now4, dtype=torch.int64)
             vectors.append(torch.stack([lxlylz_tensor1, lxlylz_tensor2, lxlylz_tensor3, lxlylz_tensor4]))
             prefactors.append(prefactor)
-            
-    return vec_dict, torch.stack(vectors), torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
+           
+    if not vectors:
+        # Return an empty tensor
+        stacked_vectors = torch.tensor([])
+    else:
+        stacked_vectors = torch.stack(vectors)
+ 
+    return vec_dict, stacked_vectors, torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 
 # a dictionary storing the number of B features for (l_max, nu_max)

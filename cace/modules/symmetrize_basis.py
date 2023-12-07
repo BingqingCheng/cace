@@ -25,28 +25,31 @@ class Symmetrizer_JIT(nn.Module):
         self.max_nu = max_nu
         self.max_l = max_l
 
+        _, vg2, vi2, pf2, n2 = find_combo_vectors_nu2(max_l)
+        self.register_buffer("vector_groups_2", vg2)
+        self.register_buffer("vector_idx_2", vi2)
+        self.register_buffer("prefactors_2", pf2)
+        self.n2_start = 1
+        self.n3_start = 1 + n2
+
+        _, vg3, vi3, pf3, n3 = find_combo_vectors_nu3(max_l)
+        self.register_buffer("vector_groups_3", vg3)
+        self.register_buffer("vector_idx_3", vi3)
+        self.register_buffer("prefactors_3", pf3)
+        self.n4_start = 1 + n2 + n3
+
+        _, vg4, vi4, pf4, n4 = find_combo_vectors_nu4(max_l)
+        self.register_buffer("vector_groups_4", vg4)
+        self.register_buffer("vector_idx_4", vi4)
+        self.register_buffer("prefactors_4", pf4)
+
         # Initialize buffers for each nu value
         self.n_angular_sym = 1
         if max_nu >= 2:
-            _, vg2, vi2, pf2, n2 = find_combo_vectors_nu2(max_l)
-            self.register_buffer("vector_groups_2", vg2)
-            self.register_buffer("vector_idx_2", vi2)
-            self.register_buffer("prefactors_2", pf2)
-            self.n2_start = 1
-            self.n3_start = 1 + n2
             self.n_angular_sym += n2
         if max_nu >= 3:
-            _, vg3, vi3, pf3, n3 = find_combo_vectors_nu3(max_l)
-            self.register_buffer("vector_groups_3", vg3)
-            self.register_buffer("vector_idx_3", vi3)
-            self.register_buffer("prefactors_3", pf3)
-            self.n4_start = 1 + n2 + n3
             self.n_angular_sym += n3
         if max_nu == 4:
-            _, vg4, vi4, pf4, n4 = find_combo_vectors_nu4(max_l)
-            self.register_buffer("vector_groups_4", vg4)
-            self.register_buffer("vector_idx_4", vi4)
-            self.register_buffer("prefactors_4", pf4)
             self.n_angular_sym += n4
 
         # Register l_list as a buffer

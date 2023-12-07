@@ -37,6 +37,11 @@ class NodeEncoder(nn.Module):
         oh.scatter_(dim=-1, index=indices, value=1)
         return oh
 
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(num_classes={self.num_classes})"
+        )
+
 class NodeEmbedding(nn.Module):
     def __init__(self, node_dim:int, embedding_dim:int, trainable=True, random_seed=42):
         super().__init__()
@@ -55,6 +60,11 @@ class NodeEmbedding(nn.Module):
 
     def forward(self, data: torch.Tensor) -> torch.Tensor:
         return torch.mm(data, self.embedding_weights)
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(num_classes={self.embedding_weights.shape[0]}, embedding_dim={self.embedding_weights.shape[1]})"
+        )
 
 class EdgeEncoder(nn.Module):
     def __init__(self, directed=True):
@@ -79,3 +89,8 @@ class EdgeEncoder(nn.Module):
             encoded_edges = torch.einsum('ki,kj->kij', min_node, max_node).flatten(start_dim=1)
 
         return encoded_edges
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(directed={self.directed})"
+        )

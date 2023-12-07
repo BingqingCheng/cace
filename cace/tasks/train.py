@@ -36,11 +36,22 @@ class TrainingTask(nn.Module):
         Args:
             model: the neural network model
             losses: list of losses an optional loss functions
+            metrics: list of metrics
             optimizer_cls: type of torch optimizer,e.g. torch.optim.Adam
             optimizer_args: dict of optimizer keyword arguments
             scheduler_cls: type of torch learning rate scheduler
             scheduler_args: dict of scheduler keyword arguments
+            ema: whether to use exponential moving average
+            ema_decay: decay rate of ema
+            ema_start: when to start ema
+            swa: whether to use stochastic weight averaging
+            swa_start: when to start swa
+            swa_lr: learning rate for swa
+            swa_losses: list of losses for swa
+            max_grad_norm: max gradient norm
+            warmup_steps: number of warmup steps before reaching the base learning rate
         """
+
         super().__init__()
         self.device = device
         self.model = model.to(self.device)
@@ -150,9 +161,10 @@ class TrainingTask(nn.Module):
                 pred = self.ema_model(batch_dict, training=False)
             else:
                 pred = self.model(batch_dict, training=False)
+
             # MACE put both on cpus, dunno why, trying it out
-            batch = batch.cpu()
-            pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
+            # batch = batch.cpu()
+            # pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
 
             loss = to_numpy(self.loss_fn(pred, batch, {'epochs': self.global_step, 'training': False}))
             total_loss += loss.item()

@@ -67,6 +67,8 @@ class AngularComponent(nn.Module):
     def get_lxlylz_dict(self):
         return self.lxlylz_dict
 
+    def __repr__(self):
+        return f"AngularComponent(l_max={self.l_max})"
 
 class AngularComponent_GPU(nn.Module):
     """ Angular component of the edge basis functions 
@@ -104,6 +106,9 @@ class AngularComponent_GPU(nn.Module):
 
     def get_lxlylz_dict(self):
         return self.lxlylz_dict
+
+    def __repr__(self):
+        return f"AngularComponent_GPU(l_max={self.l_max})"
 
 def make_lxlylz_list(l_max: int):
     """

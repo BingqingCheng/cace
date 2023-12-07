@@ -38,11 +38,13 @@ class Metrics(nn.Module):
     ):
         """
         Args:
-            target_name: Name of target in training batch. 
-            name: name of the metric object
-            loss_fn: function to compute the loss
-            loss_weight: loss weight in the composite loss: $l = w_1 l_1 + \dots + w_n l_n$
+        target_name: name of the target in the dataset
+        predict_name: name of the prediction in the model output
+        name: name of the metrics
+        metrics: dictionary of metrics to be calculated, mse, mae, rmse, r2
+        per_atom: whether to calculate the metrics per atom
         """
+
         super().__init__()
         self.target_name = target_name
         self.predict_name = predict_name or target_name
@@ -76,7 +78,6 @@ class Metrics(nn.Module):
             n_atoms = torch.bincount(target['batch'])
             pred_tensor = pred_tensor / n_atoms
             target_tensor = target_tensor / n_atoms
- 
 
         for metric in self.metrics[subset].keys():
             value = compute_loss_metrics(metric, target_tensor, pred_tensor)

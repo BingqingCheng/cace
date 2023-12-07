@@ -129,7 +129,7 @@ class Atomwise(nn.Module):
 
         # predict atomwise contributions
         y = self.outnet(features)
-        if self.linear_nn is not None:
+        if self.add_linear_nn:
             y += self.linear_nn(features)
 
         # accumulate the per-atom output if necessary
