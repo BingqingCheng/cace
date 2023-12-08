@@ -101,7 +101,7 @@ class Cace(nn.Module):
 
         # for message passing layers
         self.num_message_passing = num_message_passing
-        self.message_passing_list = [
+        self.message_passing_list = nn.ModuleList([
             nn.ModuleList([
                 NodeMemory(
                     max_l=self.max_l,
@@ -117,7 +117,7 @@ class Cace(nn.Module):
                 MesssageBchi()
             ]) 
             for _ in range(self.num_message_passing)
-            ]
+            ])
 
 
         self.device = device
