@@ -1,29 +1,29 @@
+from typing import Optional, Union, Sequence, Callable, List
 import torch
 import torch.nn as nn
-from ..tools import scatter_sum
+import torch.nn.functional as F
 
-__all__ = ["SharedInteraction", "Interaction"]
+from .blocks import Dense, ResidualBlock, build_mlp
 
-class SharedInteraction(nn.Module):
-    """Interaction layer for the message passing network. Shared L channels."""
+__all__ = ['MessageAr', 'MesssageBchi', 'NodeMemory']
+
+class MessageAr(nn.Module):
+    """
+    Interaction layer for the message passing network. 
+    Dependent on radial and channel dimensions, shared L channels.
+    :math
+    m_{j \rightarrow  i, kn\mathbf{l}}^{(t)} = 
+    f(r_{ji})
+    A_{j, kn\mathbf{l}}^{(t)}
+    """
     def __init__(self, 
                  cutoff: float,
                  max_l: int,
                  radial_embedding_dim: int, 
                  channel_dim: int,
-                 mp_norm_factor: float = 1.0, 
-                 memory_coef_init: torch.Tensor=torch.tensor(0.25),
                  ): 
         super().__init__()
-        self.max_l = max_l
-        self.register_buffer('angular_dim_groups', torch.tensor(self._init_angular_dim_groups(max_l), dtype=torch.int64))
-
-        self.register_buffer(
-            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
-        )
-        self.register_buffer(
-            "mp_norm_factor", torch.tensor(mp_norm_factor, dtype=torch.get_default_dtype())
-        )
+        self.register_buffer('angular_dim_groups', torch.tensor(init_angular_dim_groups(max_l), dtype=torch.int64))
 
         self.radial_embedding_dim = radial_embedding_dim
         self.channel_dim = channel_dim
@@ -36,44 +36,35 @@ class SharedInteraction(nn.Module):
 
         # 1/r0, intialize r0 distributed uniformly in (0.5 cutoff, 1.5 cutoff)
         self.invr0 = nn.ParameterList([
-            nn.Parameter((1.0 / self.cutoff) * (torch.rand(radial_embedding_dim, channel_dim) + 0.5))
+            nn.Parameter((1.0 / cutoff) * (torch.rand(radial_embedding_dim, channel_dim) + 0.5))
             for _ in self.angular_dim_groups
             ])
 
-        # intialize as 0.25 in the matrix form
-        self.memory_coef = nn.ParameterList([
-            nn.Parameter(torch.ones(radial_embedding_dim, channel_dim) * memory_coef_init)
-            for _ in self.angular_dim_groups
-	    ])
-        
     def forward(self, 
-                node_feat: torch.Tensor, 
-                edge_lengths: torch.Tensor,
-                radial_cutoff_fn: torch.Tensor, 
-                edge_index: torch.Tensor,
+                node_feat: torch.Tensor, # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
+                edge_lengths: torch.Tensor, # shape: [n_edges]
+                radial_cutoff_fn: torch.Tensor, # shape: [n_edges]
+                edge_index: torch.Tensor, # shape: [2, n_edges]
                ) -> torch.Tensor:
 
-        # features of the sender nodes
-        # Shape: [n_nodes, radial_dim, angular_dim, embedding_dim]
-        sender_features = node_feat[edge_index[0]]
-
-        n_nodes, radial_dim, angular_dim, embedding_dim = node_feat.shape
+        n_nodes, radial_dim, angular_dim, channel_dim = node_feat.shape
         assert radial_dim == self.radial_embedding_dim
-        assert embedding_dim == self.channel_dim
+        assert channel_dim == self.channel_dim
 
         n_edges = edge_index.shape[1]
         # features of the sender nodes
-        # Shape: [n_edges, radial_dim, angular_dim, embedding_dim]
+        # Shape: [n_edges, radial_dim, angular_dim, channel_dim]
         sender_features = node_feat[edge_index[0]]
 
-        new_node_feat = torch.zeros(n_nodes, radial_dim, angular_dim, embedding_dim,
-                             device=node_feat.device, dtype=node_feat.dtype)
+        message = torch.zeros(
+            (n_edges, radial_dim, angular_dim, channel_dim),
+            device=node_feat.device, dtype=node_feat.dtype)
 
         radial_decay = torch.zeros(
-            (n_edges, self.radial_embedding_dim, self.channel_dim),
-            dtype=torch.get_default_dtype(), device=node_feat.device)
+            (n_edges, radial_dim, channel_dim),
+            device=node_feat.device, dtype=node_feat.dtype)
 
-        for index, (prefactor, invr0, memory_coef) in enumerate(zip(self.prefactor, self.invr0, self.memory_coef)):
+        for index, (prefactor, invr0) in enumerate(zip(self.prefactor, self.invr0)):
             i_start = self.angular_dim_groups[index, 0]
             i_end = self.angular_dim_groups[index, 1]
             # Gather all angular dimensions for the current group
@@ -84,83 +75,135 @@ class SharedInteraction(nn.Module):
             radial_decay = torch.exp(-1.0 * torch.einsum('ijk,jk->ijk', edge_lengths.view(n_edges, 1, 1), invr0))
             radial_decay = torch.einsum('ijk,jk->ijk', radial_decay, prefactor)
             radial_decay = torch.einsum('ijk,ijk->ijk', radial_decay, radial_cutoff_fn.view(n_edges, 1, 1))
-            group_message = torch.einsum('ijlk,ijk->ijlk', sender_features[:, :, group, :], radial_decay) # Shape: [n_nodes, radial_dim, len(group), embedding_dim]
-            memory = torch.einsum('ijlk,jk->ijlk', node_feat[:, :, group, :], memory_coef)
-            new_node_feat[:, :, group, :] = memory + scatter_sum(src=group_message, index=edge_index[1], dim=0, dim_size=n_nodes) * self.mp_norm_factor
+            message[:, :, group, :] = torch.einsum('ijlk,ijk->ijlk', sender_features[:, :, group, :], radial_decay)
 
-        return new_node_feat
+        return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
-    def _compute_length_lxlylz(self, l):
-        return int((l+1)*(l+2)/2)
+class MesssageBchi(nn.Module):
+    """ another message passing mechanism
+    :math
+    m_{j \rightarrow  i, kn\mathbf{l}}^{(t)} = 
+    \sum_{l_x, l_y, l_z}^{l_x+l_y+l_z = l} \dfrac{l!}{l_x ! l_y ! l_z !}
+    \chi_{kn\mathbf{l}} (\sigma_i, \sigma_{i'})
+    h(B_{j, k\{nl\}}),
 
-    def _init_angular_dim_groups(self, max_l):
-        angular_dim_groups: List[int] = []
-        l_now = 0
-        for l in range(max_l+1):
-            l_list_atl = [l_now, l_now + self._compute_length_lxlylz(l)]
-            angular_dim_groups.append(l_list_atl)
-            l_now += self._compute_length_lxlylz(l)
-        return angular_dim_groups
+    in general the h function can be dependent on the radial and channel dimenstion and shared across l channels
+    For now we use the same h function (MLP) for all features
+    """
+    def __init__(self,
+        n_in: Optional[int] = None,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 1,
+        activation: Callable = F.silu,
+        residual: bool = False,
+        use_batchnorm: bool = False,
+        ):
 
-
-class Interaction(nn.Module):
-    """Interaction layer for the message passing network."""
-    def __init__(self, 
-                 cutoff: float,
-                 radial_embedding_dim: int, 
-                 channel_dim: int,
-                 mp_norm_factor: float = 1.0, 
-                 memory_coef: torch.Tensor=torch.tensor(0.25), 
-                 trainable: bool = True):
         super().__init__()
-        self.register_buffer(
-            "cutoff", torch.tensor(cutoff, dtype=torch.get_default_dtype())
-        )
-        self.register_buffer(
-            "mp_norm_factor", torch.tensor(mp_norm_factor, dtype=torch.get_default_dtype())
-        )
 
+        self.n_in = n_in
+        self.n_hidden = n_hidden
+        self.n_layers = n_layers
+        self.activation = activation
+        self.residual = residual
+        self.use_batchnorm = use_batchnorm
+
+        if n_in is not None:
+            self.hnet = build_mlp(
+                n_in=self.n_in,
+                n_out=1,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
+                )
+        else:
+            self.hnet = None
+
+    def forward(self,
+                node_feat: torch.Tensor, # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
+                edge_attri: torch.Tensor, # shape: [n_edges, radial_dim, angular_dim, channel_dim]
+                edge_index: torch.Tensor, # shape: [2, n_edges]
+		) -> torch.Tensor:
+
+        n_nodes, radial_dim, angular_dim, channel_dim = node_feat.shape
+        features = node_feat.reshape(n_nodes, -1)
+        n_edges = edge_index.shape[1]
+
+        if self.n_in is None:
+            self.n_in = features.shape[1]
+        else:
+            assert self.n_in == features.shape[1]
+
+        if self.hnet == None:
+            self.hnet = build_mlp(
+                n_in=self.n_in,
+                n_out=1,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
+                )
+            self.hnet = self.hnet.to(features.device)
+
+        node_weight = self.hnet(features) # shape: [n_nodes, 1]
+        edge_weight = node_weight[edge_index[0]] # shape: [n_edges, 1]
+        message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight.view(n_edges, 1, 1, 1))
+        return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
+
+
+class NodeMemory(nn.Module):
+    """ Compute the memory of the node during message passing """
+    def __init__(self,
+                 max_l: int,
+                 radial_embedding_dim: int,
+                 channel_dim: int,
+                 memory_coef_init: torch.Tensor=torch.tensor(0.25),
+                 ):
+        super().__init__()
+        self.max_l = max_l
+        self.register_buffer('angular_dim_groups', torch.tensor(init_angular_dim_groups(max_l), dtype=torch.int64))
         self.radial_embedding_dim = radial_embedding_dim
         self.channel_dim = channel_dim
 
-        if not isinstance(memory_coef, torch.Tensor):
-            memory_coef = torch.tensor(memory_coef, dtype=torch.get_default_dtype())
-
-        if trainable:
-            self.memory_coef = nn.Parameter(memory_coef)
-        else:
-            self.register_buffer("memory_coef", memory_coef, dtype=torch.get_default_dtype())
-
         # generate trainable tensor of size (radial_embedding_dim, channel_dim)
-        self.prefactor = nn.Parameter(
-            torch.rand(radial_embedding_dim, channel_dim))
-        # 1/r0, intialize r0 distributed uniformly in (0.5 cutoff, 1.5 cutoff)
-        self.invr0 = nn.Parameter(
-            (1.0 / self.cutoff) * (torch.rand(radial_embedding_dim, channel_dim) + 0.5))
-        
+        # intialize as 0.25 in the matrix form
+        self.memory_coef = nn.ParameterList([
+            nn.Parameter(torch.ones(radial_embedding_dim, channel_dim) * memory_coef_init)
+            for _ in self.angular_dim_groups
+            ])
+
     def forward(self, 
-                node_feat: torch.Tensor, 
-                edge_lengths: torch.Tensor,
-                radial_cutoff_fn: torch.Tensor, 
-                edge_index: torch.Tensor,
+                node_feat: torch.Tensor,
                ) -> torch.Tensor:
 
-        n_edges = edge_index.shape[1]
-        n_nodes = node_feat.shape[0]
+        n_nodes, radial_dim, angular_dim, channel_dim = node_feat.shape
+        assert radial_dim == self.radial_embedding_dim
+        assert channel_dim == self.channel_dim
 
-        radial_decay = torch.zeros(
-            (n_edges, self.radial_embedding_dim, self.channel_dim), 
-            dtype=torch.get_default_dtype(), device=node_feat.device)
+        node_memory = torch.zeros_like(node_feat)
 
-        # features of the sender nodes
-        # Shape: [n_nodes/edges, radial_dim, angular_dim, embedding_dim]
-        sender_features = node_feat[edge_index[0]]
+        for index, memory_coef in enumerate(self.memory_coef):
+            i_start = self.angular_dim_groups[index, 0]
+            i_end = self.angular_dim_groups[index, 1]
+            # Gather all angular dimensions for the current group
+            group = torch.arange(i_start, i_end)
+            node_memory[:, :, group, :] = torch.einsum('ijlk,jk->ijlk', node_feat[:, :, group, :], memory_coef)
 
-        # the influence of the sender nodes decat with distance
-        # prefactor * torch.exp(-r / r0) * cutoff_fn
-        radial_decay = torch.exp(-1.0 * torch.einsum('ijk,jk->ijk', edge_lengths.view(n_edges, 1, 1), self.invr0))
-        radial_decay = torch.einsum('ijk,jk->ijk', radial_decay, self.prefactor)
-        radial_decay = torch.einsum('ijk,ijk->ijk', radial_decay, radial_cutoff_fn.view(n_edges, 1, 1))
-        message = torch.einsum('ijlk,ijk->ijlk', sender_features, radial_decay)
+        return node_memory # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
 
-        return node_feat * self.memory_coef + scatter_sum(src=message, index=edge_index[1], dim=0, dim_size=n_nodes) * self.mp_norm_factor
+def compute_length_lxlylz(l):
+    return int((l+1)*(l+2)/2)
+
+def init_angular_dim_groups(max_l):
+    angular_dim_groups: List[int] = []
+    l_now = 0
+    for l in range(max_l+1):
+        length_at_l = compute_length_lxlylz(l)
+        l_list_atl = [l_now, l_now + length_at_l]
+        angular_dim_groups.append(l_list_atl)
+        l_now += length_at_l 
+    return angular_dim_groups
+

@@ -8,12 +8,14 @@ from ..tools import elementwise_multiply_3tensors, scatter_sum
 from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
-    SharedInteraction,
     AngularComponent, 
     AngularComponent_GPU,
     SharedRadialLinearTransform,
     Symmetrizer,
     Symmetrizer_JIT,
+    MessageAr, 
+    MesssageBchi,
+    NodeMemory
     )
 from ..modules import (
     get_edge_vectors_and_lengths,
@@ -41,13 +43,19 @@ class Cace(nn.Module):
     ):
         """
         Args:
+            zs: list of atomic numbers
             n_atom_basis: number of features to describe atomic environments.
                 This determines the size of each embedding vector; i.e. embeddings_dim.
+            edge_coding: layer for encoding edge type
+            cutoff: cutoff radius
             radial_basis: layer for expanding interatomic distances in a basis set
+            n_radial_basis: number of radial embedding dimensions
             cutoff_fn: cutoff function
             cutoff: cutoff radius
             max_l: the maximum l considered in the angular basis
             max_nu: the maximum correlation order
+            num_message_passing: number of message passing layers
+            avg_num_neighbors: average number of neighbors per atom, used for normalization
         """
         super().__init__()
         self.zs = zs
@@ -70,43 +78,49 @@ class Cace(nn.Module):
         self.n_radial_func = self.radial_basis.n_rbf
         self.n_radial_basis = n_radial_basis or self.radial_basis.n_rbf
         self.cutoff_fn = cutoff_fn
-        self.angular_basis = AngularComponent(self.max_l)
-        radial_transform = SharedRadialLinearTransform(
-                                max_l=self.max_l,
-                                radial_dim=self.n_radial_func,
-                                radial_embedding_dim=self.n_radial_basis,
-                                channel_dim=n_atom_basis**2
-                                )
-        self.radial_transform = radial_transform
-        #self.radial_transform = torch.jit.script(radial_transform)
-
-        # for message passing layers
-        self.num_message_passing = num_message_passing
-        self.message_passing = nn.ModuleList()
-        for i in range(num_message_passing):
-            self.message_passing.append(
-                SharedInteraction(
-                    cutoff=cutoff,
-                    max_l=self.max_l, 
-                    radial_embedding_dim=self.n_radial_basis,
-                    channel_dim=self.n_edge_channels,
-                    mp_norm_factor=self.mp_norm_factor,
-                    )
-                )
-
-
-        self.device = device
-
         # The AngularComponent_GPU version sometimes has trouble with second derivatives
         #if self.device  == torch.device("cpu"):
         #    self.angular_basis = AngularComponent(self.max_l)
         #else:
         #    self.angular_basis = AngularComponent_GPU(self.max_l)
+        self.angular_basis = AngularComponent(self.max_l)
+        radial_transform = SharedRadialLinearTransform(
+                                max_l=self.max_l,
+                                radial_dim=self.n_radial_func,
+                                radial_embedding_dim=self.n_radial_basis,
+                                channel_dim=self.n_edge_channels
+                                )
+        self.radial_transform = radial_transform
+        #self.radial_transform = torch.jit.script(radial_transform)
 
         self.l_list = self.angular_basis.get_lxlylz_list()
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
+        # the JIT version seems to be slower
         #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)
         #self.symmetrizer = torch.jit.script(symmetrizer)
+
+        # for message passing layers
+        self.num_message_passing = num_message_passing
+        self.message_passing_list = [
+            nn.ModuleList([
+                NodeMemory(
+                    max_l=self.max_l,
+                    radial_embedding_dim=self.n_radial_basis,
+                    channel_dim=self.n_edge_channels,
+                    ),
+                MessageAr(
+                    cutoff=cutoff,
+                    max_l=self.max_l,
+                    radial_embedding_dim=self.n_radial_basis,
+                    channel_dim=self.n_edge_channels,
+                    ),
+                MesssageBchi()
+            ]) 
+            for _ in range(self.num_message_passing)
+            ]
+
+
+        self.device = device
         self.timeit = timeit
 
     def forward(
@@ -157,7 +171,7 @@ class Cace(nn.Module):
         radial_component = self.radial_basis(edge_lengths) 
         radial_cutoff = self.cutoff_fn(edge_lengths)
         # normalize=False, use the REANN way
-        #edge_vectors = edge_vectors * radial_cutoff.view(edge_vectors.shape[0], 1)
+        # edge_vectors = edge_vectors * radial_cutoff.view(edge_vectors.shape[0], 1)
         angular_component = self.angular_basis(edge_vectors)
         t5 = time.time()
         if self.timeit: print("radial and angular component time: {}".format(t5-t4))
@@ -169,6 +183,7 @@ class Cace(nn.Module):
                       angular_component,
                       encoded_edges
         )
+
         t6 = time.time()
         if self.timeit: print("elementwise_multiply_3tensors time: {}".format(t6-t5))
 
@@ -194,18 +209,39 @@ class Cace(nn.Module):
         if self.timeit: print("symmetrizer time: {}".format(t9-t8))
 
         # message passing
-        for mp in self.message_passing:
+        for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
             t_mp_start = time.time()
-            node_feat_A = mp(node_feat=node_feat_A,
+            momeory_now = nm(node_feat=node_feat_A)
+
+            message_Bchi = mp_Bchi(node_feat=node_feat_B,
+                edge_attri=edge_attri,
+                edge_index=data["edge_index"],
+                )
+            node_feat_A_Bchi = scatter_sum(src=message_Bchi,
+                                  index=data["edge_index"][1],
+                                  dim=0,
+                                  dim_size=n_nodes)
+            # mix the different radial components
+            node_feat_A_Bchi = self.radial_transform(node_feat_A_Bchi)
+
+            message_Ar = mp_Ar(node_feat=node_feat_A,
                 edge_lengths=edge_lengths,
                 radial_cutoff_fn=radial_cutoff,
                 edge_index=data["edge_index"],
                 )
+
+            node_feat_A = node_feat_A_Bchi + scatter_sum(src=message_Ar,
+                                  index=data["edge_index"][1],
+                                  dim=0,
+                                  dim_size=n_nodes)
+ 
+            node_feat_A *= self.mp_norm_factor
+            node_feat_A += momeory_now
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
             t_mp_end = time.time()
             if self.timeit: print("message passing time: {}".format(t_mp_end-t_mp_start))
-
+     
         node_feats_out = torch.stack(node_feats_list, dim=-1)
 
         # displacement is needed for computing stress/virial
