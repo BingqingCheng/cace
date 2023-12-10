@@ -106,7 +106,6 @@ class TrainingTask(nn.Module):
     def retrieve_metrics(self, subset):
         for metric in self.metrics:
             metric.retrieve_metrics(subset)
-            metric.clear_metrics(subset)
 
     def train_step(self, batch, screen_nan: bool = True):
         torch.set_grad_enabled(True)
@@ -117,7 +116,10 @@ class TrainingTask(nn.Module):
         self.train()
         self.optimizer.zero_grad()
         pred = self.model(batch_dict, training=True)
-        loss = self.loss_fn(pred, batch, {'epochs': self.global_step, 'training': True})
+        #pred_dict = {k: v.clone().detach() for k, v in pred.items()}
+        self.log_metrics('train', pred, batch_dict)
+
+        loss = self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': True})
         loss.backward()
 
         # Print gradients for debugging purposes
@@ -146,7 +148,6 @@ class TrainingTask(nn.Module):
             if self.ema and self.global_step >= self.ema_start:
                 self.ema_model.update_parameters(self.model)
 
-        #return loss.item()
         return to_numpy(loss).item()
 
     def validate(self, val_loader):
@@ -166,9 +167,9 @@ class TrainingTask(nn.Module):
             # batch = batch.cpu()
             # pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
 
-            loss = to_numpy(self.loss_fn(pred, batch, {'epochs': self.global_step, 'training': False}))
+            loss = to_numpy(self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': False}))
             total_loss += loss.item()
-            self.log_metrics('val', pred, batch)
+            self.log_metrics('val', pred, batch_dict)
 
         return total_loss / len(val_loader)
 
@@ -215,6 +216,7 @@ class TrainingTask(nn.Module):
                     print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
                 print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
+                self.retrieve_metrics('train')
                 self.retrieve_metrics('val')
 
             if self.swa and self.global_step >= self.swa_start:
