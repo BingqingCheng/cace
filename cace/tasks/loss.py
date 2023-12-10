@@ -63,3 +63,8 @@ class GetLoss(nn.Module):
         else:
             raise ValueError("Target is None and predict_name is not equal to target_name")
         return loss
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(name={self.name}, loss_fn={self.loss_fn}, loss_weight={self.loss_weight})"
+            ) 

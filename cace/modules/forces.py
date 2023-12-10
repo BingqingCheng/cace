@@ -66,3 +66,8 @@ class Forces(nn.Module):
         if self.stress_key is not None:
             data[self.stress_key] = stress
         return data 
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__} (calc_forces={self.calc_forces}, calc_stress={self.calc_stress},) "
+            )
