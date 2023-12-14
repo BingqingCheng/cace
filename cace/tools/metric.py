@@ -1,7 +1,7 @@
 import logging
 import torch
 import torch.nn as nn
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 
 from .torch_tools import to_numpy
 
@@ -33,7 +33,7 @@ class Metrics(nn.Module):
         target_name: str,
         predict_name: Optional[str] = None,
         name: Optional[str] = None,
-        metrics: Dict[str, list] = {"mae": [], "rmse": []},
+        metric_keys: List[str] = ["mae", "rmse"],
         per_atom: bool = False,
     ):
         """
@@ -41,7 +41,7 @@ class Metrics(nn.Module):
         target_name: name of the target in the dataset
         predict_name: name of the prediction in the model output
         name: name of the metrics
-        metrics: dictionary of metrics to be calculated, mse, mae, rmse, r2
+        metric_keys: list of metrics to be calculated
         per_atom: whether to calculate the metrics per atom
         """
 
@@ -52,17 +52,14 @@ class Metrics(nn.Module):
 
         self.per_atom = per_atom
 
-        self.metric_keys = metrics.keys()
-        self.train_metrics = {k: [] for k, v in metrics.items()} 
-        self.val_metrics = {k: [] for k, v in metrics.items()}
-        self.test_metrics = {k: [] for k, v in metrics.items()}
-        self.metrics = {
-            "train": self.train_metrics,
-            "val": self.val_metrics,
-            "test": self.test_metrics,
+        self.metric_keys = metric_keys
+        self.logs = {
+            "train": {'pred': [], 'target': []},
+            "val": {'pred': [], 'target': []},
+            "test": {'pred': [], 'target': []},
         }
 
-    def forward(self, 
+    def _collect_tensor(self,
                 pred: Dict[str, torch.Tensor],
                 target: Optional[Dict[str, torch.Tensor]] = None,
                ):
@@ -78,7 +75,13 @@ class Metrics(nn.Module):
             n_atoms = torch.bincount(target['batch']).clone().detach()
             pred_tensor = pred_tensor / n_atoms
             target_tensor = target_tensor / n_atoms
+        return pred_tensor, target_tensor
 
+    def forward(self, 
+                pred: Dict[str, torch.Tensor],
+                target: Optional[Dict[str, torch.Tensor]] = None,
+               ):
+        pred_tensor, target_tensor = self._collect_tensor(pred, target)
         metrics_now = {}
         for metric in self.metric_keys:
             metrics_now[metric] = compute_loss_metrics(metric, target_tensor, pred_tensor)
@@ -89,29 +92,37 @@ class Metrics(nn.Module):
                        pred: Dict[str, torch.Tensor], 
                        target: Optional[Dict[str, torch.Tensor]] = None,
                       ):
-        metrics_now = self.forward(pred, target)
-        for metric in self.metrics[subset].keys():
-            value = metrics_now[metric] 
-            self.metrics[subset][metric].append(value)
+        pred_tensor, target_tensor = self._collect_tensor(pred, target)
+        self.logs[subset]['pred'].append(pred_tensor)
+        self.logs[subset]['target'].append(target_tensor)
 
     def retrieve_metrics(self, subset: str, clear: bool = True):
-        for metric_name, v in self.metrics[subset].items():
-            if len(v) == 0:
-                print(f'{subset}_{self.name}_{metric_name}: None')
-                continue
-            metric_mean = to_numpy(torch.mean(torch.stack(v))).item()
+        pred_tensor = torch.cat(self.logs[subset]['pred'], dim=0)
+        target_tensor = torch.cat(self.logs[subset]['target'], dim=0)
+
+        assert pred_tensor.shape == target_tensor.shape, f"pred_tensor.shape: {pred_tensor.shape}, target_tensor.shape: {target_tensor.shape}"
+
+        if pred_tensor.shape[0] == 0:
+            raise ValueError("No data in the logs")
+
+        metrics_now = {}
+        for metric in self.metric_keys:
+            metric_mean = compute_loss_metrics(metric, target_tensor, pred_tensor)
+            metrics_now[metric] = metric_mean
             print(
-                f'{subset}_{self.name}_{metric_name}: {metric_mean:.4f}',
+                f'{subset}_{self.name}_{metric}: {metric_mean:.4f}',
             )
             logging.info(
-                f'{subset}_{self.name}_{metric_name}: {metric_mean:.4f}',
+                f'{subset}_{self.name}_{metric}: {metric_mean:.4f}',
             )
         if clear:
             self.clear_metrics(subset)
 
+        return metrics_now
+
     def clear_metrics(self, subset: str):
-        for metric in self.metrics[subset].keys():
-            self.metrics[subset][metric] = []
+        self.logs[subset]['pred'] = []
+        self.logs[subset]['target'] = []
 
     def __repr__(self):
         return f'{self.__class__.__name__} name: {self.name}, metric_keys: {self.metric_keys}'
