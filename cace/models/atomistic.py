@@ -101,7 +101,8 @@ class AtomisticModel(nn.Module):
         self, data: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         for p in self.required_derivatives:
-            if isinstance(data, torch_geometric.batch.Batch): 
+	    #if isinstance(data, torch_geometric.batch.Batch): 
+            if isinstance(data, torch_geometric.Batch): 
                 if p in data.to_dict().keys():
                     data[p].requires_grad_(True)
             else:

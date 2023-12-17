@@ -26,7 +26,7 @@ with open('symmetrize_angular_l_list.pickle', 'rb') as handle:
 def find_combo_vectors_nu1():
     vector_groups = [0, 0, 0]
     prefactors = 1
-    vec_dict = {0: [([0, 0, 1], 1)]}
+    vec_dict = {0: [([0, 0, 0], 1)]}
     return vec_dict, vector_groups, prefactors
 
 def find_combo_vectors_nu2(l_max):

@@ -1,7 +1,7 @@
 import time
 import torch
 from torch import nn
-from typing import Callable, Dict, Sequence, Optional
+from typing import Callable, Dict, Sequence, Optional, List
 
 from ..tools import torch_geometric
 from ..tools import elementwise_multiply_3tensors, scatter_sum
@@ -36,6 +36,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
+        type_message_passing: List[str] = ["M", "Ar", "Bchi"],
         n_radial_basis: Optional[int] = None,
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
@@ -107,14 +108,16 @@ class Cace(nn.Module):
                     max_l=self.max_l,
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
-                    ),
+                    ) if "M" in type_message_passing else None,
+
                 MessageAr(
                     cutoff=cutoff,
                     max_l=self.max_l,
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
-                    ),
-                MesssageBchi()
+                    ) if "Ar" in type_message_passing else None,
+
+                MesssageBchi() if "Bchi" in type_message_passing else None,
             ]) 
             for _ in range(self.num_message_passing)
             ])
@@ -211,30 +214,40 @@ class Cace(nn.Module):
         # message passing
         for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
             t_mp_start = time.time()
-            momeory_now = nm(node_feat=node_feat_A)
+            if nm is not None:
+                momeory_now = nm(node_feat=node_feat_A)
+            else:
+                momeory_now = 0.0
 
-            message_Bchi = mp_Bchi(node_feat=node_feat_B,
-                edge_attri=edge_attri,
-                edge_index=data["edge_index"],
-                )
-            node_feat_A_Bchi = scatter_sum(src=message_Bchi,
+            if mp_Bchi is not None:
+                message_Bchi = mp_Bchi(node_feat=node_feat_B,
+                    edge_attri=edge_attri,
+                    edge_index=data["edge_index"],
+                    )
+                node_feat_A_Bchi = scatter_sum(src=message_Bchi,
+                                       index=data["edge_index"][1],
+                                       dim=0,
+                                       dim_size=n_nodes)
+                # mix the different radial components
+                node_feat_A_Bchi = self.radial_transform(node_feat_A_Bchi)
+            else:
+                node_feat_A_Bchi = 0.0 
+
+            if mp_Ar is not None:
+                message_Ar = mp_Ar(node_feat=node_feat_A,
+                    edge_lengths=edge_lengths,
+                    radial_cutoff_fn=radial_cutoff,
+                    edge_index=data["edge_index"],
+                    )
+
+                node_feat_A = scatter_sum(src=message_Ar,
                                   index=data["edge_index"][1],
                                   dim=0,
                                   dim_size=n_nodes)
-            # mix the different radial components
-            node_feat_A_Bchi = self.radial_transform(node_feat_A_Bchi)
-
-            message_Ar = mp_Ar(node_feat=node_feat_A,
-                edge_lengths=edge_lengths,
-                radial_cutoff_fn=radial_cutoff,
-                edge_index=data["edge_index"],
-                )
-
-            node_feat_A = node_feat_A_Bchi + scatter_sum(src=message_Ar,
-                                  index=data["edge_index"][1],
-                                  dim=0,
-                                  dim_size=n_nodes)
+            else:
+                node_feat_A = 0.0
  
+            node_feat_A += node_feat_A_Bchi 
             node_feat_A *= self.mp_norm_factor
             node_feat_A += momeory_now
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
