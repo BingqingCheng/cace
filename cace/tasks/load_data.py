@@ -26,7 +26,7 @@ def load_data_loader(
         raise ValueError(f"Input value must be one of {allowed_types}, got {data_type}")
 
     if data_type == 'train':
-        loader = torch_geometric.dataloader.DataLoader(
+        loader = torch_geometric.DataLoader(
             dataset=[
                 AtomicData.from_config(config, cutoff=cutoff)
                 for config in collection.train
@@ -36,7 +36,7 @@ def load_data_loader(
             drop_last=True,
         )
     elif data_type == 'valid':
-        loader = torch_geometric.dataloader.DataLoader(
+        loader = torch_geometric.DataLoader(
             dataset=[
                 AtomicData.from_config(config, cutoff=cutoff)
                 for config in collection.valid
@@ -46,7 +46,7 @@ def load_data_loader(
             drop_last=False,
         )
     elif data_type == 'test':
-        loader = torch_geometric.dataloader.DataLoader(
+        loader = torch_geometric.DataLoader(
             dataset=[
                 AtomicData.from_config(config, cutoff=cutoff)
                 for config in collection.test

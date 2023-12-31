@@ -15,7 +15,7 @@ from ..modules import (
     Symmetrizer,
     Symmetrizer_JIT,
     MessageAr, 
-    MesssageBchi,
+    MessageBchi,
     NodeMemory
     )
 from ..modules import (
@@ -117,7 +117,7 @@ class Cace(nn.Module):
                     channel_dim=self.n_edge_channels,
                     ) if "Ar" in type_message_passing else None,
 
-                MesssageBchi() if "Bchi" in type_message_passing else None,
+                MessageBchi() if "Bchi" in type_message_passing else None,
             ]) 
             for _ in range(self.num_message_passing)
             ])

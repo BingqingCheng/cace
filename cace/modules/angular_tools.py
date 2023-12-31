@@ -2,7 +2,7 @@ import itertools
 import torch
 from .angular import lxlylz_factorial_coef, make_lxlylz
 
-__all__ = ['find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', "n_B_feat_dict"]
+__all__ = ['find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4']
 
 """
 We can store the values
