@@ -8,6 +8,7 @@ from ..tools import elementwise_multiply_3tensors, scatter_sum
 from ..modules import (
     NodeEncoder, 
     NodeEmbedding, 
+    EdgeEncoder,
     AngularComponent, 
     AngularComponent_GPU,
     SharedRadialLinearTransform,
@@ -29,7 +30,6 @@ class Cace(nn.Module):
         self,
         zs: Sequence[int],
         n_atom_basis: int,
-        edge_coding: nn.Module,
         cutoff: float,
         radial_basis: nn.Module,
         cutoff_fn: Callable,
@@ -72,7 +72,7 @@ class Cace(nn.Module):
         self.node_embedding = NodeEmbedding(
                          node_dim=self.nz, embedding_dim=self.n_atom_basis
                          )
-        self.edge_coding = edge_coding
+        self.edge_coding = EdgeEncoder(directed=True) 
         self.n_edge_channels = n_atom_basis**2
 
         self.radial_basis = radial_basis
