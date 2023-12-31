@@ -240,14 +240,14 @@ class Cace(nn.Module):
                     edge_index=data["edge_index"],
                     )
 
-                node_feat_A = scatter_sum(src=message_Ar,
+                node_feat_Ar = scatter_sum(src=message_Ar,
                                   index=data["edge_index"][1],
                                   dim=0,
                                   dim_size=n_nodes)
             else:
-                node_feat_A = 0.0
+                node_feat_Ar = 0.0
  
-            node_feat_A += node_feat_A_Bchi 
+            node_feat_A = node_feat_Ar + node_feat_A_Bchi 
             node_feat_A *= self.mp_norm_factor
             node_feat_A += momeory_now
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)

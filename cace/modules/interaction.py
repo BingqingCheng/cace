@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .blocks import Dense, ResidualBlock, build_mlp
 
-__all__ = ['MessageAr', 'MesssageBchi', 'NodeMemory']
+__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory']
 
 class MessageAr(nn.Module):
     """
@@ -79,7 +79,77 @@ class MessageAr(nn.Module):
 
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
-class MesssageBchi(nn.Module):
+class MessageArMLP(nn.Module):
+    """
+    Interaction layer for the message passing network.
+    Dependent on radial and channel dimensions, shared L channels.
+    :math
+    m_{j \rightarrow  i, kn\mathbf{l}}^{(t)} =
+    f(r_{ji})
+    A_{j, kn\mathbf{l}}^{(t)}
+    """
+    def __init__(self,
+                 cutoff: float,
+                 max_l: int,
+                 radial_embedding_dim: int,
+                 channel_dim: int,
+                 activation: Union[Callable, nn.Module] = F.sigmoid,
+                 ):
+        super().__init__()
+        self.register_buffer('angular_dim_groups', torch.tensor(init_angular_dim_groups(max_l), dtype=torch.int64))
+
+        self.radial_embedding_dim = radial_embedding_dim
+        self.channel_dim = channel_dim
+
+        # generate trainable tensor of size (radial_embedding_dim, channel_dim)
+        self.weights = nn.ParameterList([
+            nn.Parameter(
+                torch.rand(radial_embedding_dim, channel_dim)
+                )
+            for _ in self.angular_dim_groups
+            ])
+
+        self.activation = activation
+
+    def forward(self,
+                node_feat: torch.Tensor, # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
+                radial_component: torch.Tensor, # shape: [n_edges, radial_dim]
+                radial_cutoff_fn: torch.Tensor, # shape: [n_edges]
+                edge_index: torch.Tensor, # shape: [2, n_edges]
+               ) -> torch.Tensor:
+
+        n_nodes, radial_dim, angular_dim, channel_dim = node_feat.shape
+        assert channel_dim == self.channel_dim
+
+        n_edges = edge_index.shape[1]
+        # features of the sender nodes
+        # Shape: [n_edges, radial_dim, angular_dim, channel_dim]
+        sender_features = node_feat[edge_index[0]]
+
+        message = torch.zeros(
+            (n_edges, radial_dim, angular_dim, channel_dim),
+            device=node_feat.device, dtype=node_feat.dtype)
+
+        radial_decay = torch.zeros(
+            (n_edges, radial_dim, channel_dim),
+            device=node_feat.device, dtype=node_feat.dtype)
+
+        for index, weights in enumerate(self.weights):
+            i_start = self.angular_dim_groups[index, 0]
+            i_end = self.angular_dim_groups[index, 1]
+            # Gather all angular dimensions for the current group
+            group = torch.arange(i_start, i_end)
+
+            # the influence of the sender nodes decay with distance
+            # radial_component * weights * cutoff_fn
+            radial_decay = torch.einsum('ai,ik->ak', radial_component, weights)
+            radial_decay = self.activation(radial_decay)
+            radial_decay = radial_decay * radial_cutoff_fn.view(n_edges, 1)
+            message[:, :, group, :] = sender_features[:, :, group, :] * radial_decay.unsqueeze(1).unsqueeze(2)
+
+        return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
+
+class MessageBchi(nn.Module):
     """ another message passing mechanism
     :math
     m_{j \rightarrow  i, kn\mathbf{l}}^{(t)} = 

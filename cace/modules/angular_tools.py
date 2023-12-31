@@ -163,50 +163,6 @@ def find_combo_vectors_nu4(l_max):
     return vec_dict, stacked_vectors, torch.tensor(vector_idx, dtype=torch.int64), torch.tensor(prefactors, dtype=torch.int64), len(vec_dict)
 
 
-# a dictionary storing the number of B features for (l_max, nu_max)
-n_B_feat_dict: dict 
-n_B_feat_dict = {(1, 1): 1,
-     (1, 2): 2,
-     (1, 3): 2,
-     (1, 4): 2,
-     (2, 1): 1,
-     (2, 2): 3,
-     (2, 3): 4,
-     (2, 4): 4,
-     (3, 1): 1,
-     (3, 2): 4,
-     (3, 3): 6,
-     (3, 4): 7,
-     (4, 1): 1,
-     (4, 2): 5,
-     (4, 3): 9,
-     (4, 4): 13,
-     (5, 1): 1,
-     (5, 2): 6,
-     (5, 3): 12,
-     (5, 4): 22,
-     (6, 1): 1,
-     (6, 2): 7,
-     (6, 3): 16,
-     (6, 4): 36,
-     (7, 1): 1,
-     (7, 2): 8,
-     (7, 3): 20,
-     (7, 4): 55,
-     (8, 1): 1,
-     (8, 2): 9,
-     (8, 3): 25,
-     (8, 4): 81,
-     (9, 1): 1,
-     (9, 2): 10,
-     (9, 3): 30,
-     (9, 4): 114,
-     (10, 1): 1,
-     (10, 2): 11,
-     (10, 3): 36,
-     (10, 4): 156}
-
-
 def cal_num_B_features():
     """function to precalculate the number of B features"""
     n_B_feat_dict = {}

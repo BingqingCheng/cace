@@ -149,10 +149,14 @@ def get_edge_vectors_and_lengths(
 def get_edge_node_type(
     edge_index: torch.Tensor,  # [2, n_edges]
     node_type: torch.Tensor,  # [n_nodes, n_dims]
+    node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    if node_type_2 is None:
+        node_type_2 = node_type
+
     edge_type = torch.zeros([edge_index.shape[1], 2, node_type.shape[1]], 
                            dtype=node_type.dtype, device=node_type.device)
     sender_type = node_type[edge_index[0]]
-    receiver_type = node_type[edge_index[1]]
+    receiver_type = node_type_2[edge_index[1]]
     return sender_type, receiver_type  # [n_edges, n_dims]
 

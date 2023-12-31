@@ -74,9 +74,10 @@ class EdgeEncoder(nn.Module):
     def forward(self,     
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
+               node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
                ) -> torch.Tensor:
         # Split the edge tensor into two parts for node1 and node2
-        node1, node2 = get_edge_node_type(edge_index, node_type)
+        node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
 
         if self.directed:
             # Use batched torch.outer for directed edges
