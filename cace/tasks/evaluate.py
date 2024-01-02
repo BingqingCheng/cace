@@ -31,6 +31,7 @@ class EvaluateTask(nn.Module):
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
+        atomic_energies: dict = None,
         ):
 
         super().__init__()
@@ -43,6 +44,8 @@ class EvaluateTask(nn.Module):
         self.energy_key = energy_key
         self.forces_key = forces_key
         self.stress_key = stress_key
+
+        self.atomic_energies = atomic_energies
         
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
@@ -67,7 +70,11 @@ class EvaluateTask(nn.Module):
         if isinstance(data, torch_geometric.batch.Batch):
             data.to(self.device)
             output = self.model(data.to_dict())
-            energies_list.append(to_numpy(output[self.energy_key]))
+            if self.atomic_energies is not None:
+                e0_list = self._add_atomic_energies(data)
+                energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
+            else:
+                energies_list.append(to_numpy(output[self.energy_key]))
             forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
@@ -86,10 +93,9 @@ class EvaluateTask(nn.Module):
             )
             output = self.model(next(iter(data_loader)).to_dict())
             energy = to_numpy(output[self.energy_key])
-            # TODO: subtract atomic energies if available
-            #if self.atomic_energies is not None:
-            #    atomic_numbers = data.get_atomic_numbers()
-            #    energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
+            if self.atomic_energies is not None:
+                atomic_numbers = data.get_atomic_numbers()
+                energy += sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
             energies_list.append(energy)
             forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
@@ -115,7 +121,12 @@ class EvaluateTask(nn.Module):
             for batch in data_loader:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
-                energies_list.append(to_numpy(output[self.energy_key]))
+                if self.atomic_energies is not None:
+                    e0_list = self._add_atomic_energies(batch)
+                    energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
+                else:
+                    energies_list.append(to_numpy(output[self.energy_key]))
+
                 forces_list.append(to_numpy(output[self.forces_key]))
                 forces = np.split(
                     to_numpy(output[self.forces_key]),
@@ -143,6 +154,12 @@ class EvaluateTask(nn.Module):
             for batch in data:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
+                if self.atomic_energies is not None:
+                    e0_list = self._add_atomic_energies(batch)
+                    energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
+                else:
+                    energies_list.append(to_numpy(output[self.energy_key]))
+
                 energies_list.append(to_numpy(output[self.energy_key]))
                 forces_list.append(to_numpy(output[self.forces_key]))
                 if compute_stress and self.stress_key in output:
@@ -156,3 +173,13 @@ class EvaluateTask(nn.Module):
             "stress": None if len(stresses_list) == 0 else np.concatenate(stresses_list) * self.energy_units_to_eV / self.length_units_to_A ** 3,
 	}
         return results
+
+    def _add_atomic_energies(self, batch: torch_geometric.batch.Batch):
+        e0_list = []
+        atomic_numbers_list = np.split(to_numpy(batch['atomic_numbers']),
+             indices_or_sections=batch.ptr[1:],
+             axis=0,
+             )[:-1]
+        for atomic_numbers in atomic_numbers_list:
+            e0_list.append(sum(self.atomic_energies.get(Z, 0) for Z in atomic_numbers))
+        return np.array(e0_list)
