@@ -160,7 +160,6 @@ class EvaluateTask(nn.Module):
                 else:
                     energies_list.append(to_numpy(output[self.energy_key]))
 
-                energies_list.append(to_numpy(output[self.energy_key]))
                 forces_list.append(to_numpy(output[self.forces_key]))
                 if compute_stress and self.stress_key in output:
                     stresses_list.append(to_numpy(output[self.stress_key]))
