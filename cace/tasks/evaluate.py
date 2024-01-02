@@ -3,6 +3,7 @@ import torch
 from torch import nn
 
 from ase import Atoms
+from ase.io import read, write
 
 from ..tools import torch_geometric, torch_tools, to_numpy
 from ..data import AtomicData, config_from_atoms
@@ -49,7 +50,7 @@ class EvaluateTask(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
 
-    def forward(self, data=None, batch_size=1, compute_stress=False):
+    def forward(self, data=None, batch_size=1, compute_stress=False, xyz_output=None):
         """
         Calculate properties.
         args:
@@ -67,12 +68,7 @@ class EvaluateTask(nn.Module):
             data.to(self.device)
             output = self.model(data.to_dict())
             energies_list.append(to_numpy(output[self.energy_key]))
-            forces = np.split(
-                torch_tools.to_numpy(output[self.forces_key]),
-                indices_or_sections=data.ptr[1:],
-                axis=0,
-            )
-            forces_list.append(forces[:-1])
+            forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
 
@@ -115,38 +111,48 @@ class EvaluateTask(nn.Module):
 		shuffle=False,
 		drop_last=False,
 	    )
+            atomforces_list = []
             for batch in data_loader:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
                 energies_list.append(to_numpy(output[self.energy_key]))
+                forces_list.append(to_numpy(output[self.forces_key]))
                 forces = np.split(
                     to_numpy(output[self.forces_key]),
                     indices_or_sections=batch.ptr[1:],
                     axis=0,
                 )
-                forces_list.append(forces[:-1])
-            if compute_stress and self.stress_key in output:
-                stresses_list.append(to_numpy(output[self.stress_key]))
+                atomforces_list.append(forces[:-1])
+                if compute_stress and self.stress_key in output:
+                    stresses_list.append(to_numpy(output[self.stress_key]))
+
+            # Store data in atoms objects
+            # TODO: doesn't work
+            if xyz_output is not None and batch_size == 1:
+                for i, (atoms, energy, forces) in enumerate(zip(data, energies_list, atomforces_list)):
+                    atoms.calc = None  # crucial
+                    atoms.info[self.energy_key] = energy
+                    atoms.arrays[self.forces_key] = forces
+    
+                    if compute_stress:
+                        atoms.info[self.stress_key] = stresses_list[i]
+                    # Write atoms to output path
+                    write(xyz_output, atoms, format="extxyz", append=True)
 
         elif isinstance(data, torch_geometric.dataloader.DataLoader):
             for batch in data:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
                 energies_list.append(to_numpy(output[self.energy_key]))
-                forces = np.split(
-                    torch_tools.to_numpy(output[self.forces_key]),
-                    indices_or_sections=batch.ptr[1:],
-                    axis=0,
-                )
-                forces_list.append(forces[:-1])
-            if compute_stress and self.stress_key in output:
-                stresses_list.append(to_numpy(output[self.stress_key]))
+                forces_list.append(to_numpy(output[self.forces_key]))
+                if compute_stress and self.stress_key in output:
+                    stresses_list.append(to_numpy(output[self.stress_key]))
         else:
             raise ValueError("Input data type not recognized")
 
         results = {
             "energy": np.concatenate(energies_list) * self.energy_units_to_eV,
-            "forces": np.concatenate(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
+            "forces": np.vstack(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
             "stress": None if len(stresses_list) == 0 else np.concatenate(stresses_list) * self.energy_units_to_eV / self.length_units_to_A ** 3,
 	}
         return results
