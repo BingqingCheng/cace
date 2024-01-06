@@ -93,6 +93,7 @@ class CACECalculator(Calculator):
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
         output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress)
+        #print(output)
         # subtract atomic energies if available
         if self.atomic_energies:
             e0 = sum(self.atomic_energies.get(Z, 0) for Z in atoms.get_atomic_numbers())
@@ -101,6 +102,11 @@ class CACECalculator(Calculator):
         self.results["energy"] = (to_numpy(output[self.energy_key]) + e0) * self.energy_units_to_eV
         self.results["forces"] = to_numpy(output[self.forces_key]) * self.energy_units_to_eV / self.length_units_to_A
         if self.compute_stress and output["stress"] is not None:
-            self.results["stress"] = full_3x3_to_voigt_6_stress(to_numpy(output[self.stress_key])) * self.energy_units_to_eV / self.length_units_to_A**3
+            stress = to_numpy(output["stress"])
+            # stress has units eng / len^3:
+            self.results["stress"] = (
+                stress * (self.energy_units_to_eV / self.length_units_to_A**3)
+            )[0]
+            self.results["stress"] = full_3x3_to_voigt_6_stress(self.results["stress"])
 
         return self.results

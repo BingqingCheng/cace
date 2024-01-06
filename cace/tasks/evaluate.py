@@ -20,6 +20,7 @@ class EvaluateTask(nn.Module):
         energy_key: str, name of energy key in model output
         forces_key: str, name of forces key in model output
         stress_key: str, name of stress key in model output
+        atomic_energies: dict, dictionary of atomic energies to add to model output
     """
 
     def __init__(
