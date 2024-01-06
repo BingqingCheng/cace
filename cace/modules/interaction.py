@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .blocks import Dense, ResidualBlock, build_mlp
 
-__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory']
+__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory', 'MesssageBchi']
 
 class MessageAr(nn.Module):
     """
@@ -149,6 +149,7 @@ class MessageArMLP(nn.Module):
 
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
+
 class MessageBchi(nn.Module):
     """ another message passing mechanism
     :math
@@ -223,6 +224,8 @@ class MessageBchi(nn.Module):
         message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight.view(n_edges, 1, 1, 1))
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
+
+MesssageBchi = MessageBchi
 
 class NodeMemory(nn.Module):
     """ Compute the memory of the node during message passing """

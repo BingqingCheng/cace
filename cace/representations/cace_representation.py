@@ -37,6 +37,8 @@ class Cace(nn.Module):
         max_nu: int,
         num_message_passing: int,
         type_message_passing: List[str] = ["M", "Ar", "Bchi"],
+        embed_receiver_nodes: bool = False,
+        atom_embedding_random_seed: List[int] = [42, 42], 
         n_radial_basis: Optional[int] = None,
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
@@ -69,9 +71,17 @@ class Cace(nn.Module):
 
         # layers
         self.node_onehot = NodeEncoder(self.zs)
-        self.node_embedding = NodeEmbedding(
-                         node_dim=self.nz, embedding_dim=self.n_atom_basis
+        # sender node embedding
+        self.node_embedding_sender = NodeEmbedding(
+                         node_dim=self.nz, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[0]
                          )
+        if embed_receiver_nodes:
+            self.node_embedding_receiver = NodeEmbedding(
+                         node_dim=self.nz, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[1]
+                         )
+        else:
+            self.node_embedding_receiver = self.node_embedding_sender 
+
         self.edge_coding = EdgeEncoder(directed=True) 
         self.n_edge_channels = n_atom_basis**2
 
@@ -150,13 +160,15 @@ class Cace(nn.Module):
         if self.timeit: print("node_one_hot time: {}".format(t1-t0))
 
         ## embed to a different dimension
-        node_embedded = self.node_embedding(node_one_hot)
+        node_embedded_sender = self.node_embedding_sender(node_one_hot)
+        node_embedded_receiver = self.node_embedding_receiver(node_one_hot)
         t2 = time.time()
         if self.timeit: print("node_embedded time: {}".format(t2-t1))
 
         ## get the edge type
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
-                                         node_type=node_embedded)
+                                         node_type=node_embedded_sender,
+                                         node_type_2=node_embedded_receiver,)
 
         t3 = time.time()        
         if self.timeit: print("encoded_edges time: {}".format(t3-t2))

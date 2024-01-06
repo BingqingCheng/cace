@@ -116,7 +116,6 @@ class TrainingTask(nn.Module):
         self.train()
         self.optimizer.zero_grad()
         pred = self.model(batch_dict, training=True)
-        #pred_dict = {k: v.clone().detach() for k, v in pred.items()}
         self.log_metrics('train', pred, batch_dict)
 
         loss = self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': True})
@@ -163,10 +162,6 @@ class TrainingTask(nn.Module):
             else:
                 pred = self.model(batch_dict, training=False)
 
-            # MACE put both on cpus, dunno why, trying it out
-            # batch = batch.cpu()
-            # pred = tensor_dict_to_device(pred, device=torch.device("cpu"))
-
             loss = to_numpy(self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': False}))
             total_loss += loss.item()
             self.log_metrics('val', pred, batch_dict)
@@ -180,11 +175,13 @@ class TrainingTask(nn.Module):
             val_stride: int = 1, 
             screen_nan: bool = True,
             checkpoint_path: Optional[str] = 'checkpoint.pt',
+            checkpoint_stride: int = 10,            
+            bestmodel_path: Optional[str] = 'best_model.pth',
            ):
 
         best_val_loss = float('inf')
 
-        for epoch in range(epochs):
+        for epoch in range(1, epochs + 1):
 
             # start SWA if needed
             if self.swa and self.global_step >= self.swa_start:
@@ -229,7 +226,11 @@ class TrainingTask(nn.Module):
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                self.save_model(checkpoint_path, device=self.device)
+                self.save_model(bestmodel_path, device=self.device)
+
+            if checkpoint_path is not None and epoch % checkpoint_stride == 0:
+                self.checkpoint(checkpoint_path)
+
             self.global_step += 1 
 
     def save_model(self, path: str, device: torch.device = torch.device('cpu')):
