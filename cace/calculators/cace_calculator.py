@@ -16,8 +16,12 @@ class CACECalculator(Calculator):
     args:
         model_path: str, path to model
         device: str, device to run on (cuda or cpu)
+        compute_stress: bool, whether to compute stress
+        energy_key: str, key for energy in model output
+        forces_key: str, key for forces in model output
         energy_units_to_eV: float, conversion factor from model energy units to eV
         length_units_to_A: float, conversion factor from model length units to Angstroms
+        atomic_energies: dict, dictionary of atomic energies to add to model output
     """
 
     def __init__(
@@ -30,6 +34,7 @@ class CACECalculator(Calculator):
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
+        atomic_energies: dict = None,
         **kwargs,
         ):
 
@@ -50,6 +55,8 @@ class CACECalculator(Calculator):
         self.length_units_to_A = length_units_to_A
 
         self.cutoff = self.model.representation.cutoff
+
+        self.atomic_energies = atomic_energies
 
         self.compute_stress = compute_stress
         self.energy_key = energy_key 
@@ -86,7 +93,12 @@ class CACECalculator(Calculator):
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
         output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress)
-        self.results["energy"] = to_numpy(output[self.energy_key]) * self.energy_units_to_eV
+        # subtract atomic energies if available
+        if self.atomic_energies:
+            e0 = sum(self.atomic_energies.get(Z, 0) for Z in atoms.get_atomic_numbers())
+        else:
+            e0 = 0.0
+        self.results["energy"] = (to_numpy(output[self.energy_key]) + e0) * self.energy_units_to_eV
         self.results["forces"] = to_numpy(output[self.forces_key]) * self.energy_units_to_eV / self.length_units_to_A
         if self.compute_stress and output["stress"] is not None:
             self.results["stress"] = full_3x3_to_voigt_6_stress(to_numpy(output[self.stress_key])) * self.energy_units_to_eV / self.length_units_to_A**3
