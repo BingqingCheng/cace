@@ -1,5 +1,7 @@
 # the CACE calculator for ASE
 
+from typing import Union
+
 import numpy as np 
 import torch
 
@@ -14,7 +16,7 @@ __all__ = ["CACECalculator"]
 class CACECalculator(Calculator):
     """CACE ASE Calculator
     args:
-        model_path: str, path to model
+        model_path: str or nn.module, path to model
         device: str, device to run on (cuda or cpu)
         compute_stress: bool, whether to compute stress
         energy_key: str, key for energy in model output
@@ -26,7 +28,7 @@ class CACECalculator(Calculator):
 
     def __init__(
         self,
-        model_path: str,
+        model_path: Union[str, torch.nn.Module],
         device: str,
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
@@ -47,7 +49,12 @@ class CACECalculator(Calculator):
 
         self.results = {}
 
-        self.model = torch.load(f=model_path, map_location=device)
+        if isinstance(model_path, str):
+            self.model = torch.load(f=model_path, map_location=device)
+        elif isinstance(model_path, nn.Module):
+            self.model = model_path
+        else:
+            raise ValueError("model_path must be a string or nn.Module")
         self.model.to(device)
 
         self.device = torch_tools.init_device(device)

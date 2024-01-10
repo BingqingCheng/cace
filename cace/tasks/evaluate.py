@@ -1,3 +1,4 @@
+from typing import Union
 import numpy as np 
 import torch
 from torch import nn
@@ -25,7 +26,7 @@ class EvaluateTask(nn.Module):
 
     def __init__(
         self,
-        model_path: str,
+        model_path: Union[str, nn.Module],
         device: str = "cpu",
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
@@ -37,7 +38,13 @@ class EvaluateTask(nn.Module):
 
         super().__init__()
 
-        self.model = torch.load(f=model_path, map_location=device)
+        if isinstance(model_path, str):
+            self.model = torch.load(f=model_path, map_location=device)
+        elif isinstance(model_path, nn.Module):
+            self.model = model_path
+        else:
+            raise ValueError("model_path must be a string or nn.Module")
+
         self.model.to(device)
 
         self.device = torch_tools.init_device(device)

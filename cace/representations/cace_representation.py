@@ -13,7 +13,7 @@ from ..modules import (
     AngularComponent_GPU,
     SharedRadialLinearTransform,
     Symmetrizer,
-    Symmetrizer_JIT,
+    #Symmetrizer_JIT,
     MessageAr, 
     MessageBchi,
     NodeMemory

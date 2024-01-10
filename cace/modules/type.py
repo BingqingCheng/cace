@@ -6,6 +6,7 @@ __all__ = [
     'NodeEncoder',
     'NodeEmbedding',
     'EdgeEncoder',
+    'NodeEncoder_with_interpolation'
 ]
 
 from .utils import get_edge_node_type
@@ -22,11 +23,13 @@ class NodeEncoder(nn.Module):
         # Directly convert atomic numbers to indices using the precomputed map
         indices = self.index_map[atomic_numbers]
 
-        # Handle out-of-range atomic numbers by setting indices to zero
-        indices[indices < 0] = 0
+        # raise an error if there are out-of-range atomic numbers
+        if (indices < 0).any():
+            raise ValueError(f"Atomic numbers out of range: {atomic_numbers[indices < 0]}")
 
         # Generate one-hot encoding
         one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes, device=device)
+
         return one_hot_encoding
 
     def to_one_hot(self, indices: torch.Tensor, num_classes: int, device=torch.device) -> torch.Tensor:
@@ -41,6 +44,33 @@ class NodeEncoder(nn.Module):
         return (
             f"{self.__class__.__name__}(num_classes={self.num_classes})"
         )
+
+class NodeEncoder_with_interpolation(nn.Module):
+    """
+    cumstom NodeEncoder.
+    if the atomic number is within zs, using one-hot encoding, otherwise use interpolation between two nearest zs.
+    """
+    def __init__(self, zs: Sequence[int]):
+        super().__init__()
+        self.num_classes = len(zs)
+        self.zs = zs
+
+    def forward(self, atomic_numbers: torch.Tensor) -> torch.Tensor:
+        device = atomic_numbers.device
+        # map atomic numbers to indices
+        encoded = torch.zeros(atomic_numbers.shape[0], self.num_classes, device=device, dtype=torch.float32)
+        # interpolate between two nearest zs
+        for i, z in enumerate(atomic_numbers):
+            if z in self.zs:
+                encoded[i, self.zs.index(z)] = 1
+            else:
+                for j in range(len(self.zs)):
+                    if z < self.zs[j]:
+                        encoded[i, j-1] = (self.zs[j] - z) / (self.zs[j] - self.zs[j-1])
+                        encoded[i, j] = (z - self.zs[j-1]) / (self.zs[j] - self.zs[j-1])
+                        #print(z, i, j , encoded[i, j-1], encoded[i, j])
+                        break
+        return encoded
 
 class NodeEmbedding(nn.Module):
     def __init__(self, node_dim:int, embedding_dim:int, trainable=True, random_seed=42):
