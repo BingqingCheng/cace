@@ -11,53 +11,11 @@ __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
 class AtomisticModel(nn.Module):
     """
-    Base class for all SchNetPack models.
-
-    SchNetPack models should subclass `AtomisticModel` implement the forward method.
-    To use the automatic collection of required derivatives, each submodule that
-    requires gradients w.r.t to the input, should list them as strings in
-    `submodule.required_derivatives = ["input_key"]`. The model needs to call
-    `self.collect_derivatives()` at the end of its `__init__`.
-
-    To make use of post-processing transform, the model should call
-    `input = self.postprocess(input)` at the end of its `forward`. The post processors
-    will only be applied if `do_postprocessing=True`.
-
-    Example:
-         class SimpleModel(AtomisticModel):
-            def __init__(
-                self,
-                representation: nn.Module,
-                output_module: nn.Module,
-                postprocessors: Optional[List[Transform]] = None,
-                input_dtype_str: str = "float32",
-                do_postprocessing: bool = True,
-            ):
-                super().__init__(
-                    input_dtype_str=input_dtype_str,
-                    postprocessors=postprocessors,
-                    do_postprocessing=do_postprocessing,
-                )
-                self.representation = representation
-                self.output_modules = output_modules
-
-                self.collect_derivatives()
-
-            def forward(self, data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-                data = self.initialize_derivatives(data)
-
-                data = self.representation(data)
-                data = self.output_module(data)
-
-                # apply postprocessing (if enabled)
-                data = self.postprocess(data)
-                return data
-
+    Base class for atomistic neural network models.
     """
 
     def __init__(
         self,
-        #input_dtype_str: str = "float32",
         postprocessors: Optional[List[Transform]] = None,
         do_postprocessing: bool = False,
     ):
@@ -66,11 +24,9 @@ class AtomisticModel(nn.Module):
             postprocessors: Post-processing transforms that may be
                 initialized using the `datamodule`, but are not
                 applied during training.
-            input_dtype: The dtype of real data as string.
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__()
-        #self.input_dtype_str = input_dtype_str
         self.do_postprocessing = do_postprocessing
         self.postprocessors = nn.ModuleList(postprocessors)
         self.required_derivatives: Optional[List[str]] = None
@@ -101,7 +57,6 @@ class AtomisticModel(nn.Module):
         self, data: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         for p in self.required_derivatives:
-	    #if isinstance(data, torch_geometric.batch.Batch): 
             if isinstance(data, torch_geometric.Batch): 
                 if p in data.to_dict().keys():
                     data[p].requires_grad_(True)
