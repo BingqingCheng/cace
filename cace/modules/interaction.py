@@ -72,10 +72,12 @@ class MessageAr(nn.Module):
 
             # the influence of the sender nodes decay with distance
             # prefactor * torch.exp(-r / r0) * cutoff_fn
-            radial_decay = torch.exp(-1.0 * torch.einsum('ijk,jk->ijk', edge_lengths.view(n_edges, 1, 1), invr0))
-            radial_decay = torch.einsum('ijk,jk->ijk', radial_decay, prefactor)
-            radial_decay = torch.einsum('ijk,ijk->ijk', radial_decay, radial_cutoff_fn.view(n_edges, 1, 1))
-            message[:, :, group, :] = torch.einsum('ijlk,ijk->ijlk', sender_features[:, :, group, :], radial_decay)
+            #radial_decay = torch.exp(-1.0 * torch.einsum('ijk,jk->ijk', edge_lengths.view(n_edges, 1, 1), invr0))
+            #radial_decay = torch.einsum('ijk,jk->ijk', radial_decay, prefactor)
+            #radial_decay = torch.einsum('ijk,ijk->ijk', radial_decay, radial_cutoff_fn.view(n_edges, 1, 1))
+            radial_decay = torch.exp(-1.0 * edge_lengths.view(n_edges, 1, 1) * invr0[None, :, :]) *  prefactor[None, :, :] * radial_cutoff_fn.view(n_edges, 1, 1)
+            #message[:, :, group, :] = torch.einsum('ijlk,ijk->ijlk', sender_features[:, :, group, :], radial_decay)
+            message[:, :, group, :] = sender_features[:, :, group, :] * radial_decay[:, :, None, :]
 
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
@@ -165,6 +167,8 @@ class MessageBchi(nn.Module):
         n_in: Optional[int] = None,
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 1,
+        shared_channels: bool = True,
+        n_out: Optional[int] = None,
         activation: Callable = F.silu,
         residual: bool = False,
         use_batchnorm: bool = False,
@@ -178,11 +182,14 @@ class MessageBchi(nn.Module):
         self.activation = activation
         self.residual = residual
         self.use_batchnorm = use_batchnorm
+        self.shared_channels = shared_channels
+        if shared_channels:
+            n_out = 1
 
-        if n_in is not None:
+        if n_in is not None and n_out is not None:
             self.hnet = build_mlp(
                 n_in=self.n_in,
-                n_out=1,
+                n_out=n_out,
                 n_hidden=self.n_hidden,
                 n_layers=self.n_layers,
                 activation=self.activation,
@@ -208,9 +215,13 @@ class MessageBchi(nn.Module):
             assert self.n_in == features.shape[1]
 
         if self.hnet == None:
+            if self.shared_channels:
+                n_out = 1
+            else:
+                n_out = channel_dim
             self.hnet = build_mlp(
                 n_in=self.n_in,
-                n_out=1,
+                n_out=n_out,
                 n_hidden=self.n_hidden,
                 n_layers=self.n_layers,
                 activation=self.activation,
@@ -219,9 +230,10 @@ class MessageBchi(nn.Module):
                 )
             self.hnet = self.hnet.to(features.device)
 
-        node_weight = self.hnet(features) # shape: [n_nodes, 1]
-        edge_weight = node_weight[edge_index[0]] # shape: [n_edges, 1]
-        message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight.view(n_edges, 1, 1, 1))
+        node_weight = self.hnet(features) # shape: [n_nodes, 1 or channel_dim]
+        edge_weight = node_weight[edge_index[0]] # shape: [n_edges, 1 or channel_dim]
+        #message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight[:, None, None, :])
+        message = edge_attri * edge_weight[:, None, None, :]
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
 
@@ -263,7 +275,8 @@ class NodeMemory(nn.Module):
             i_end = self.angular_dim_groups[index, 1]
             # Gather all angular dimensions for the current group
             group = torch.arange(i_start, i_end)
-            node_memory[:, :, group, :] = torch.einsum('ijlk,jk->ijlk', node_feat[:, :, group, :], memory_coef)
+            #node_memory[:, :, group, :] = torch.einsum('ijlk,jk->ijlk', node_feat[:, :, group, :], memory_coef)
+            node_memory[:, :, group, :] = node_feat[:, :, group, :] * memory_coef[None, :, None, :]
 
         return node_memory # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
 
