@@ -83,7 +83,8 @@ class EvaluateTask(nn.Module):
                 energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
             else:
                 energies_list.append(to_numpy(output[self.energy_key]))
-            forces_list.append(to_numpy(output[self.forces_key]))
+            if self.forces_key in output:
+                forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
 
@@ -105,7 +106,8 @@ class EvaluateTask(nn.Module):
                 atomic_numbers = data.get_atomic_numbers()
                 energy += sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
             energies_list.append(energy)
-            forces_list.append(to_numpy(output[self.forces_key]))
+            if self.forces_key in output:
+                forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
 
@@ -135,13 +137,14 @@ class EvaluateTask(nn.Module):
                 else:
                     energies_list.append(to_numpy(output[self.energy_key]))
 
-                forces_list.append(to_numpy(output[self.forces_key]))
-                forces = np.split(
-                    to_numpy(output[self.forces_key]),
-                    indices_or_sections=batch.ptr[1:],
-                    axis=0,
-                )
-                atomforces_list.append(forces[:-1])
+                if self.forces_key in output:
+                    forces_list.append(to_numpy(output[self.forces_key]))
+                    forces = np.split(
+                        to_numpy(output[self.forces_key]),
+                        indices_or_sections=batch.ptr[1:],
+                        axis=0,
+                    )
+                    atomforces_list.append(forces[:-1])
                 if compute_stress and self.stress_key in output:
                     stresses_list.append(to_numpy(output[self.stress_key]))
 
@@ -168,7 +171,8 @@ class EvaluateTask(nn.Module):
                 else:
                     energies_list.append(to_numpy(output[self.energy_key]))
 
-                forces_list.append(to_numpy(output[self.forces_key]))
+                if self.forces_key in output:
+                    forces_list.append(to_numpy(output[self.forces_key]))
                 if compute_stress and self.stress_key in output:
                     stresses_list.append(to_numpy(output[self.stress_key]))
         else:
@@ -176,7 +180,7 @@ class EvaluateTask(nn.Module):
 
         results = {
             "energy": np.concatenate(energies_list) * self.energy_units_to_eV,
-            "forces": np.vstack(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
+            "forces": None if len(forces_list) == 0 else np.vstack(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
             "stress": None if len(stresses_list) == 0 else np.concatenate(stresses_list) * self.energy_units_to_eV / self.length_units_to_A ** 3,
 	}
         return results
