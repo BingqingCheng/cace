@@ -18,7 +18,7 @@ Please refer to the `setup.py` file for installation instructions.
 
 ## Usage
 
-[Include instructions on how to use the CACE package, example scripts, or a link to a documentation page.]
+Example scripts can be found in [https://github.com/BingqingCheng/cacefit].
 
 ## License
 
