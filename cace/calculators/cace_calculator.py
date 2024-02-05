@@ -51,7 +51,7 @@ class CACECalculator(Calculator):
 
         if isinstance(model_path, str):
             self.model = torch.load(f=model_path, map_location=device)
-        elif isinstance(model_path, nn.Module):
+        elif isinstance(model_path, torch.nn.Module):
             self.model = model_path
         else:
             raise ValueError("model_path must be a string or nn.Module")

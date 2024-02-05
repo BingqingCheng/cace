@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .blocks import Dense, ResidualBlock, build_mlp
 
-__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory', 'MesssageBchi']
+__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory', 'MesssageBchi', 'MessageBA']
 
 class MessageAr(nn.Module):
     """
@@ -161,14 +161,15 @@ class MessageBchi(nn.Module):
     h(B_{j, k\{nl\}}),
 
     in general the h function can be dependent on the radial and channel dimenstion and shared across l channels
-    For now we use the same h function (MLP) for all features
     """
     def __init__(self,
         n_in: Optional[int] = None,
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 1,
         shared_channels: bool = True,
+        shared_l: bool = True,
         n_out: Optional[int] = None,
+        lxlylz_index: Optional[torch.Tensor] = None,
         activation: Callable = F.silu,
         residual: bool = False,
         use_batchnorm: bool = False,
@@ -183,7 +184,25 @@ class MessageBchi(nn.Module):
         self.residual = residual
         self.use_batchnorm = use_batchnorm
         self.shared_channels = shared_channels
+        self.shared_l = shared_l
+
         if shared_channels:
+            self.nc = 1
+
+        if shared_l is False and lxlylz_index is None:
+            raise ValueError("lxlylz_index must be provided if shared_l is False")
+
+        if shared_l:
+            self.nl = 1
+        else:
+            self.nl = len(lxlylz_index)
+            self.nlxlylz = lxlylz_index[-1, 1]
+            l_matrix = torch.zeros(self.nl, self.nlxlylz)
+            for i,index_now in enumerate(lxlylz_index):
+                l_matrix[i, index_now[0]:index_now[1]] = 1 
+            self.register_buffer('l_matrix', l_matrix)
+
+        if shared_channels and shared_l:
             n_out = 1
 
         if n_in is not None and n_out is not None:
@@ -209,6 +228,12 @@ class MessageBchi(nn.Module):
         features = node_feat.reshape(n_nodes, -1)
         n_edges = edge_index.shape[1]
 
+        # check if self.shared_l exists, if not, set it to True
+        if not hasattr(self, 'shared_l'):
+            self.shared_l = True
+            self.nl = 1
+            self.nc = 1
+
         if self.n_in is None:
             self.n_in = features.shape[1]
         else:
@@ -218,7 +243,11 @@ class MessageBchi(nn.Module):
             if self.shared_channels:
                 n_out = 1
             else:
+                self.nc = channel_dim
                 n_out = channel_dim
+            if self.shared_l is False:
+                n_out *= self.nl 
+
             self.hnet = build_mlp(
                 n_in=self.n_in,
                 n_out=n_out,
@@ -230,14 +259,121 @@ class MessageBchi(nn.Module):
                 )
             self.hnet = self.hnet.to(features.device)
 
-        node_weight = self.hnet(features) # shape: [n_nodes, 1 or channel_dim]
+        node_weight = self.hnet(features).reshape(n_nodes, self.nl, self.nc) 
+        # make the weight for each lxlylz group the same by multiplying the l_matrix
+        if self.shared_l is False:
+            node_weight = torch.einsum('lm,ilk->imk', self.l_matrix, node_weight) 
         edge_weight = node_weight[edge_index[0]] # shape: [n_edges, 1 or channel_dim]
-        #message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight[:, None, None, :])
-        message = edge_attri * edge_weight[:, None, None, :]
+        #message = torch.einsum('ijlk,ijlk->ijlk', edge_attri, edge_weight[:, None, :, :])
+        message = edge_attri * edge_weight[:, None, :,  :]
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
 
 MesssageBchi = MessageBchi
+
+class MessageBA(nn.Module):
+    """ another message passing mechanism
+    :math
+    m_{j \rightarrow  i} = MLP(B_i) A_i
+    """
+    def __init__(self,
+        n_in: Optional[int] = None,
+        n_hidden: Optional[Union[int, Sequence[int]]] = None,
+        n_layers: int = 1,
+        shared_channels: bool = True,
+        shared_l: bool = True,
+        n_out: Optional[int] = None,
+        lxlylz_index: Optional[torch.Tensor] = None,
+        activation: Callable = F.silu,
+        residual: bool = False,
+        use_batchnorm: bool = False,
+        ):
+
+        super().__init__()
+
+        self.n_in = n_in
+        self.n_hidden = n_hidden
+        self.n_layers = n_layers
+        self.activation = activation
+        self.residual = residual
+        self.use_batchnorm = use_batchnorm
+        self.shared_channels = shared_channels
+        self.shared_l = shared_l
+
+        if shared_channels:
+            self.nc = 1
+
+        if shared_l is False and lxlylz_index is None:
+            raise ValueError("lxlylz_index must be provided if shared_l is False")
+
+        if shared_l:
+            self.nl = 1
+        else:
+            self.nl = lxlylz_index[-1, 1]
+            l_matrix = torch.zeros(self.nl, self.nl)
+            for index_now in lxlylz_index:
+                l_size = index_now[1] - index_now[0]
+                l_matrix[index_now[0]:index_now[1], index_now[0]:index_now[1]] = torch.ones(l_size, l_size) / l_size
+            self.register_buffer('l_matrix', l_matrix)
+
+        if shared_channels and shared_l:
+            n_out = 1
+
+        if n_in is not None and n_out is not None:
+            self.hnet = build_mlp(
+                n_in=self.n_in,
+                n_out=n_out,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
+                )
+        else:
+            self.hnet = None
+
+    def forward(self,
+                node_feat: torch.Tensor, # shape: [n_nodes, radial_dim, angular_dim, channel_dim]
+                node_feat_A: torch.Tensor, # shape: [n_nodes, radial_dim, l_dim, channel_dim]
+                edge_index: torch.Tensor, # shape: [2, n_edges]
+                ) -> torch.Tensor:
+
+        n_nodes, radial_dim, angular_dim, channel_dim = node_feat.shape
+        features = node_feat.reshape(n_nodes, -1)
+        n_edges = edge_index.shape[1]
+
+        if self.n_in is None:
+            self.n_in = features.shape[1]
+        else:
+            assert self.n_in == features.shape[1]
+
+        if self.hnet is None:
+            if self.shared_channels:
+                n_out = 1
+            else:
+                self.nc = channel_dim
+                n_out = channel_dim
+            if self.shared_l is False:
+                n_out *= self.nl
+
+            self.hnet = build_mlp(
+                n_in=self.n_in,
+                n_out=n_out,
+                n_hidden=self.n_hidden,
+                n_layers=self.n_layers,
+                activation=self.activation,
+                residual=self.residual,
+                use_batchnorm=self.use_batchnorm,
+                )
+            self.hnet = self.hnet.to(features.device)
+
+        node_weight = self.hnet(features).reshape(n_nodes, self.nl, self.nc)
+        # make the weight for each lxlylz group the same by multiplying the l_matrix
+        if self.shared_l is False:
+            node_weight = torch.einsum('lm,ilk->imk', self.l_matrix, node_weight)
+        node_feat_A_new = node_feat_A * node_weight[:, None, :, :]
+        message = node_feat_A_new[edge_index[0]] 
+        return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
 class NodeMemory(nn.Module):
     """ Compute the memory of the node during message passing """

@@ -36,6 +36,11 @@ class AngularComponent(nn.Module):
                     if lxlylz_combination_tuple not in self.lxlylz_dict[l]:
                         self.lxlylz_dict[l].append(lxlylz_combination_tuple)
         self.lxlylz_list = self._convert_lxlylz_to_list()
+        # get the start and the end index of the lxlylz_list for each l
+        self.lxlylz_index = torch.zeros((self.l_max+1, 2), dtype=torch.long)
+        for l in range(self.l_max+1):
+            self.lxlylz_index[l, 0] = 0 if l == 0 else self.lxlylz_index[l-1, 1] 
+            self.lxlylz_index[l, 1] = compute_length_lmax(l) 
 
     def forward(self, vectors: torch.Tensor) -> torch.Tensor:
 
@@ -61,11 +66,13 @@ class AngularComponent(nn.Module):
     def get_lxlylz_list(self):
         if self.lxlylz_list is None:
             raise ValueError("You must call forward before getting lxlylz_list")
-        #return torch.tensor(self.lxlylz_list, dtype=torch.int64)
         return self.lxlylz_list
 
     def get_lxlylz_dict(self):
         return self.lxlylz_dict
+ 
+    def get_lxlylz_index(self):
+        return self.lxlylz_index
 
     def __repr__(self):
         return f"AngularComponent(l_max={self.l_max})"

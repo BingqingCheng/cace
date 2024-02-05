@@ -36,7 +36,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
-        type_message_passing: List[str] = ["M", "Ar", "Bchi"],
+        type_message_passing: List[str] = ["Bchi"],
         embed_receiver_nodes: bool = False,
         atom_embedding_random_seed: List[int] = [42, 42], 
         n_radial_basis: Optional[int] = None,
@@ -127,7 +127,13 @@ class Cace(nn.Module):
                     channel_dim=self.n_edge_channels,
                     ) if "Ar" in type_message_passing else None,
 
-                MessageBchi() if "Bchi" in type_message_passing else None,
+                MessageBchi(
+                    n_layers=1,
+                    #n_hidden=[16],
+                    shared_channels=False,
+                    shared_l = False,
+                    lxlylz_index = self.angular_basis.get_lxlylz_index(),
+                    ) if "Bchi" in type_message_passing else None,
             ]) 
             for _ in range(self.num_message_passing)
             ])
