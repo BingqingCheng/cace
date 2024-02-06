@@ -146,8 +146,6 @@ class Cace(nn.Module):
         self, 
         data: Dict[str, torch.Tensor]
     ):
-        # TODO: check if all elements included in self.zs
-        
         # setup
         n_nodes = data['positions'].shape[0]
         if data["batch"] == None:

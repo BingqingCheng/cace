@@ -5,7 +5,7 @@ import torch.nn.functional as F
 
 from .blocks import Dense, ResidualBlock, build_mlp
 
-__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory', 'MesssageBchi', 'MessageBA']
+__all__ = ['MessageAr', 'MessageArMLP', 'MessageBchi', 'NodeMemory', 'MessageBA']
 
 class MessageAr(nn.Module):
     """
@@ -75,8 +75,8 @@ class MessageAr(nn.Module):
             #radial_decay = torch.exp(-1.0 * torch.einsum('ijk,jk->ijk', edge_lengths.view(n_edges, 1, 1), invr0))
             #radial_decay = torch.einsum('ijk,jk->ijk', radial_decay, prefactor)
             #radial_decay = torch.einsum('ijk,ijk->ijk', radial_decay, radial_cutoff_fn.view(n_edges, 1, 1))
-            radial_decay = torch.exp(-1.0 * edge_lengths.view(n_edges, 1, 1) * invr0[None, :, :]) *  prefactor[None, :, :] * radial_cutoff_fn.view(n_edges, 1, 1)
             #message[:, :, group, :] = torch.einsum('ijlk,ijk->ijlk', sender_features[:, :, group, :], radial_decay)
+            radial_decay = torch.exp(-1.0 * edge_lengths.view(n_edges, 1, 1) * invr0[None, :, :]) *  prefactor[None, :, :] * radial_cutoff_fn.view(n_edges, 1, 1)
             message[:, :, group, :] = sender_features[:, :, group, :] * radial_decay[:, :, None, :]
 
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
@@ -268,8 +268,6 @@ class MessageBchi(nn.Module):
         message = edge_attri * edge_weight[:, None, :,  :]
         return message # shape: [n_edges, radial_dim, angular_dim, channel_dim]
 
-
-MesssageBchi = MessageBchi
 
 class MessageBA(nn.Module):
     """ another message passing mechanism
