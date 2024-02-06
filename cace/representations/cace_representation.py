@@ -36,7 +36,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
-        type_message_passing: List[str] = ["Bchi"],
+        type_message_passing: List[str] = ["M", "Ar", "Bchi"],
         embed_receiver_nodes: bool = False,
         atom_embedding_random_seed: List[int] = [42, 42], 
         n_radial_basis: Optional[int] = None,
