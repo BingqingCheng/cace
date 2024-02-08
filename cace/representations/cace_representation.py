@@ -1,7 +1,7 @@
 import time
 import torch
 from torch import nn
-from typing import Callable, Dict, Sequence, Optional, List
+from typing import Callable, Dict, Sequence, Optional, List, Any
 
 from ..tools import torch_geometric
 from ..tools import elementwise_multiply_3tensors, scatter_sum
@@ -37,6 +37,7 @@ class Cace(nn.Module):
         max_nu: int,
         num_message_passing: int,
         type_message_passing: List[str] = ["M", "Ar", "Bchi"],
+        args_message_passing: Dict[str, Any] = {"M": {}, "Ar": {}, "Bchi": {}},
         embed_receiver_nodes: bool = False,
         atom_embedding_random_seed: List[int] = [42, 42], 
         n_radial_basis: Optional[int] = None,
@@ -118,6 +119,7 @@ class Cace(nn.Module):
                     max_l=self.max_l,
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
+                    **args_message_passing["M"] if "M" in args_message_passing else {}
                     ) if "M" in type_message_passing else None,
 
                 MessageAr(
@@ -125,14 +127,12 @@ class Cace(nn.Module):
                     max_l=self.max_l,
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
+                    **args_message_passing["Ar"] if "Ar" in args_message_passing else {}
                     ) if "Ar" in type_message_passing else None,
 
                 MessageBchi(
-                    n_layers=1,
-                    #n_hidden=[16],
-                    shared_channels=False,
-                    shared_l = False,
                     lxlylz_index = self.angular_basis.get_lxlylz_index(),
+                    **args_message_passing["Bchi"] if "Bchi" in args_message_passing else {}
                     ) if "Bchi" in type_message_passing else None,
             ]) 
             for _ in range(self.num_message_passing)
