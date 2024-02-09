@@ -1,4 +1,3 @@
-import time
 import torch
 from torch import nn
 from typing import Callable, Dict, Sequence, Optional, List, Any
@@ -140,7 +139,6 @@ class Cace(nn.Module):
 
 
         self.device = device
-        self.timeit = timeit
 
     def forward(
         self, 
@@ -157,25 +155,14 @@ class Cace(nn.Module):
 
         # Embeddings
         ## code each node/element in one-hot way
-        # add timing to each step of the forward pass
-        t0 = time.time()
         node_one_hot = self.node_onehot(data['atomic_numbers'])
-        t1 = time.time()
-        if self.timeit: print("node_one_hot time: {}".format(t1-t0))
-
         ## embed to a different dimension
         node_embedded_sender = self.node_embedding_sender(node_one_hot)
         node_embedded_receiver = self.node_embedding_receiver(node_one_hot)
-        t2 = time.time()
-        if self.timeit: print("node_embedded time: {}".format(t2-t1))
-
         ## get the edge type
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
                                          node_type=node_embedded_sender,
                                          node_type_2=node_embedded_receiver,)
-
-        t3 = time.time()        
-        if self.timeit: print("encoded_edges time: {}".format(t3-t2))
 
         # compute angular and radial terms
         edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
@@ -184,16 +171,9 @@ class Cace(nn.Module):
             shifts=data["shifts"],
             normalize=True,
             )
-        t4 = time.time()
-        if self.timeit: print("edge_vectors time: {}".format(t4-t3))
-
         radial_component = self.radial_basis(edge_lengths) 
         radial_cutoff = self.cutoff_fn(edge_lengths)
-        # normalize=False, use the REANN way
-        # edge_vectors = edge_vectors * radial_cutoff.view(edge_vectors.shape[0], 1)
         angular_component = self.angular_basis(edge_vectors)
-        t5 = time.time()
-        if self.timeit: print("radial and angular component time: {}".format(t5-t4))
 
         # combine
         # 4-dimensional tensor: [n_edges, radial_dim, angular_dim, embedding_dim]
@@ -203,33 +183,22 @@ class Cace(nn.Module):
                       encoded_edges
         )
 
-        t6 = time.time()
-        if self.timeit: print("elementwise_multiply_3tensors time: {}".format(t6-t5))
-
         # sum over edge features to each node
         # 4-dimensional tensor: [n_nodes, radial_dim, angular_dim, embedding_dim]
         node_feat_A = scatter_sum(src=edge_attri, 
                                   index=data["edge_index"][1], 
                                   dim=0, 
                                   dim_size=n_nodes)
-        t7 = time.time()
-        if self.timeit: print("scatter_sum time: {}".format(t7-t6))
 
         # mix the different radial components
         node_feat_A = self.radial_transform(node_feat_A)
-        t8 = time.time()
-        if self.timeit: print("radial_transform time: {}".format(t8-t7))
 
         # symmetrized B basis
         node_feat_B = self.symmetrizer(node_attr=node_feat_A)
         node_feats_list.append(node_feat_B)
 
-        t9 = time.time()
-        if self.timeit: print("symmetrizer time: {}".format(t9-t8))
-
         # message passing
         for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
-            t_mp_start = time.time()
             if nm is not None:
                 momeory_now = nm(node_feat=node_feat_A)
             else:
@@ -268,17 +237,9 @@ class Cace(nn.Module):
             node_feat_A += momeory_now
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
-            t_mp_end = time.time()
-            if self.timeit: print("message passing time: {}".format(t_mp_end-t_mp_start))
      
         node_feats_out = torch.stack(node_feats_list, dim=-1)
 
-        # displacement is needed for computing stress/virial
-        #if isinstance(data, torch_geometric.batch.Batch):
-        #    displacement = data.to_dict().get("displacement", None)
-        #elif isinstance(data, Dict):
-        #    ddisplacement = data.get("displacement", None)
-        # or maybe
         try:
             displacement = data["displacement"]
         except:
