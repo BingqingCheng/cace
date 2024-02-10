@@ -109,9 +109,9 @@ class Metrics(nn.Module):
         for metric in self.metric_keys:
             metric_mean = compute_loss_metrics(metric, target_tensor, pred_tensor)
             metrics_now[metric] = metric_mean
-            print(
-                f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
-            )
+            #print(
+            #    f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
+            #)
             logging.info(
                 f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
             )
