@@ -9,7 +9,7 @@ import torch.nn as nn
 from math import factorial
 from collections import OrderedDict
 
-__all__=['AngularComponent', 'AngularComponent_GPU', 'make_lxlylz_list', 'make_lxlylz', 'make_l_dict', 'l_dict_to_lxlylz_list', 'compute_length_lxlylz', 'compute_length_lmax', 'compute_length_lmax_numerical', 'lxlylz_factorial_coef', 'lxlylz_factorial_coef_torch']
+__all__=['AngularComponent', 'AngularComponent_GPU', 'make_lxlylz_list', 'make_lxlylz', 'make_l_dict', 'l_dict_to_lxlylz_list', 'compute_length_lxlylz', 'compute_length_lmax', 'compute_length_lmax_numerical', 'lxlylz_factorial_coef', 'lxlylz_factorial_coef_torch', 'l1l2_factorial_coef']
 
 import torch
 import torch.nn as nn
@@ -175,6 +175,21 @@ def compute_length_lmax_numerical(l_max):
         length += compute_length_lxlylz(l)
     return length
 
+
+def l1l2_factorial_coef(l1, l2):
+    # Ensure inputs are integers
+    if not all(isinstance(n, int) for n in l1):
+        raise ValueError("All elements of l1 must be integers.")
+    if not all(isinstance(n, int) for n in l2):
+        raise ValueError("All elements of l2 must be integers.")
+
+    # Compute the multinomial coefficient
+    result = 1
+    for l1i, l2i in zip(l1, l2):
+        result *= factorial(l1i + l2i)
+        result /= factorial(l1i)
+        result /= factorial(l2i)
+    return result
 
 def lxlylz_factorial_coef(lxlylz):
     # Ensure inputs are integers

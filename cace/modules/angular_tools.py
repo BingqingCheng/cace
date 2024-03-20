@@ -1,8 +1,8 @@
 import itertools
 import torch
-from .angular import lxlylz_factorial_coef, make_lxlylz
+from .angular import l1l2_factorial_coef, lxlylz_factorial_coef, make_lxlylz
 
-__all__ = ['find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', 'find_combo_vectors_nu5']
+__all__ = ['find_combo_vectors_l1l2', 'find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', 'find_combo_vectors_nu5']
 
 """
 We can store the values
@@ -26,6 +26,21 @@ with open('symmetrize_angular_l_list.pickle', 'rb') as handle:
 def no_repeats(*lists):
     combined = sum(lists, [])
     return len(combined) == len(set(combined))
+
+def find_combo_vectors_l1l2(l_max):
+    vec_dict = {}
+    for lx1, ly1, lz1 in itertools.product(range(l_max+1), repeat=3):
+        l1 = lx1 + ly1 + lz1
+        if (lx1 + ly1 + lz1) <= l_max:
+            for lx2, ly2, lz2 in itertools.product(range(l_max+1), repeat=3):
+                l2 = lx2 + ly2 + lz2
+                if (lx2 + ly2 + lz2) <= l_max:
+                    lx3, ly3, lz3 = lx1 + lx2, ly1 + ly2, lz1 + lz2
+                    if (lx3 + ly3 + lz3) <= l_max:
+                        prefactor = l1l2_factorial_coef([lx1, ly1, lz1],[lx2, ly2, lz2])
+                        key = (lx3, ly3, lz3)
+                        vec_dict[key] = vec_dict.get(key, []) + [([lx1, ly1, lz1], [lx2, ly2, lz2], prefactor)]
+    return vec_dict
 
 def find_combo_vectors_nu1():
     vector_groups = [0, 0, 0]

@@ -6,6 +6,8 @@ from .angular_tools import *
 
 from .symmetrize_basis import *
 
+from .product_basis import *
+
 from .cutoff import *
 
 from .radial import *
