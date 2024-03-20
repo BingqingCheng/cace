@@ -210,9 +210,9 @@ class TrainingTask(nn.Module):
                 val_loss = self.validate(val_loader)
                 for pg in self.optimizer.param_groups:
                     lr_now = pg["lr"]
-                    #print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
+                    print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
                     logging.info(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
-                #print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
+                print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 self.retrieve_metrics('train')
                 self.retrieve_metrics('val')

@@ -13,6 +13,7 @@ from ..modules import (
     SharedRadialLinearTransform,
     Symmetrizer,
     #Symmetrizer_JIT,
+    AngularTensorProduct,
     MessageAr, 
     MessageBchi,
     NodeMemory
@@ -37,6 +38,7 @@ class Cace(nn.Module):
         num_message_passing: int,
         type_message_passing: List[str] = ["M", "Ar", "Bchi"],
         args_message_passing: Dict[str, Any] = {"M": {}, "Ar": {}, "Bchi": {}},
+        message_passing_max_l: Optional[int] = None,
         embed_receiver_nodes: bool = False,
         atom_embedding_random_seed: List[int] = [42, 42], 
         n_radial_basis: Optional[int] = None,
@@ -99,7 +101,7 @@ class Cace(nn.Module):
                                 max_l=self.max_l,
                                 radial_dim=self.n_radial_func,
                                 radial_embedding_dim=self.n_radial_basis,
-                                channel_dim=self.n_edge_channels
+                                channel_dim=self.n_edge_channels,
                                 )
         self.radial_transform = radial_transform
         #self.radial_transform = torch.jit.script(radial_transform)
@@ -112,6 +114,16 @@ class Cace(nn.Module):
 
         # for message passing layers
         self.num_message_passing = num_message_passing
+        if self.num_message_passing > 0:
+            if message_passing_max_l is None:
+                self.message_passing_max_l = self.max_l
+            else:
+                self.message_passing_max_l = message_passing_max_l
+            self.angulartensorproduct =  AngularTensorProduct(self.message_passing_max_l, self.l_list)
+            #angulartensorproduct =  AngularTensorProduct(self.message_passing_max_l, self.l_list)
+            #self.angulartensorproduct = torch.jit.script(angulartensorproduct)
+            self.symmetrizer_mp = Symmetrizer(self.max_nu, self.message_passing_max_l, self.l_list)
+
         self.message_passing_list = nn.ModuleList([
             nn.ModuleList([
                 NodeMemory(
@@ -133,6 +145,21 @@ class Cace(nn.Module):
                     lxlylz_index = self.angular_basis.get_lxlylz_index(),
                     **args_message_passing["Bchi"] if "Bchi" in args_message_passing else {}
                     ) if "Bchi" in type_message_passing else None,
+
+                SharedRadialLinearTransform(
+                    max_l=self.max_l,
+                    radial_dim=self.n_radial_func,
+                    radial_embedding_dim=self.n_radial_func,
+                    channel_dim=self.n_edge_channels,
+                    ) if "Bchi" in type_message_passing else None,
+
+                SharedRadialLinearTransform(
+                    max_l=self.max_l,
+                    radial_dim=self.n_radial_func,
+                    radial_embedding_dim=self.n_radial_basis,
+                    channel_dim=self.n_edge_channels,
+                    ) if "Bchi" in type_message_passing else None,
+
             ]) 
             for _ in range(self.num_message_passing)
             ])
@@ -191,22 +218,24 @@ class Cace(nn.Module):
                                   dim_size=n_nodes)
 
         # mix the different radial components
-        node_feat_A = self.radial_transform(node_feat_A)
+        node_feat_A_mixed = self.radial_transform(node_feat_A)
 
         # symmetrized B basis
-        node_feat_B = self.symmetrizer(node_attr=node_feat_A)
+        node_feat_B = self.symmetrizer(node_attr=node_feat_A_mixed)
         node_feats_list.append(node_feat_B)
 
         # message passing
-        for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
+        for nm, mp_Ar, mp_Bchi, mp_radial_transform_pre, mp_radial_transform in self.message_passing_list: 
             if nm is not None:
-                momeory_now = nm(node_feat=node_feat_A)
+                momeory_now = nm(node_feat=node_feat_A_mixed)
             else:
                 momeory_now = 0.0
 
             if mp_Bchi is not None:
+                node_feat_A = mp_radial_transform_pre(node_feat_A)
+                edge_attri_product = self.angulartensorproduct(edge_attri, node_feat_A[data["edge_index"][0]])
                 message_Bchi = mp_Bchi(node_feat=node_feat_B,
-                    edge_attri=edge_attri,
+                    edge_attri=edge_attri_product,
                     edge_index=data["edge_index"],
                     )
                 node_feat_A_Bchi = scatter_sum(src=message_Bchi,
@@ -214,12 +243,12 @@ class Cace(nn.Module):
                                        dim=0,
                                        dim_size=n_nodes)
                 # mix the different radial components
-                node_feat_A_Bchi = self.radial_transform(node_feat_A_Bchi)
+                node_feat_A_Bchi = mp_radial_transform(node_feat_A_Bchi)
             else:
                 node_feat_A_Bchi = 0.0 
 
             if mp_Ar is not None:
-                message_Ar = mp_Ar(node_feat=node_feat_A,
+                message_Ar = mp_Ar(node_feat=node_feat_A_mixed,
                     edge_lengths=edge_lengths,
                     radial_cutoff_fn=radial_cutoff,
                     edge_index=data["edge_index"],
@@ -235,10 +264,11 @@ class Cace(nn.Module):
             node_feat_A = node_feat_Ar + node_feat_A_Bchi 
             node_feat_A *= self.mp_norm_factor
             node_feat_A += momeory_now
-            node_feat_B = self.symmetrizer(node_attr=node_feat_A)
+            node_feat_B = self.symmetrizer_mp(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
      
-        node_feats_out = torch.stack(node_feats_list, dim=-1)
+        #node_feats_out = torch.stack(node_feats_list, dim=-1)
+        node_feats_out = torch.cat(node_feats_list, dim=2)
 
         try:
             displacement = data["displacement"]
