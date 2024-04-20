@@ -96,7 +96,7 @@ class Metrics(nn.Module):
         self.logs[subset]['pred'].append(pred_tensor)
         self.logs[subset]['target'].append(target_tensor)
 
-    def retrieve_metrics(self, subset: str, clear: bool = True):
+    def retrieve_metrics(self, subset: str, clear: bool = True, print_log: bool = True):
         pred_tensor = torch.cat(self.logs[subset]['pred'], dim=0)
         target_tensor = torch.cat(self.logs[subset]['target'], dim=0)
 
@@ -109,9 +109,10 @@ class Metrics(nn.Module):
         for metric in self.metric_keys:
             metric_mean = compute_loss_metrics(metric, target_tensor, pred_tensor)
             metrics_now[metric] = metric_mean
-            #print(
-            #    f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
-            #)
+            if print_log:
+                print(
+                    f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
+                )
             logging.info(
                 f'{subset}_{self.name}_{metric}: {metric_mean:.6f}',
             )

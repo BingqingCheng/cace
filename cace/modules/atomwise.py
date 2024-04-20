@@ -25,6 +25,7 @@ class Atomwise(nn.Module):
         aggregation_mode: str = "sum",
         output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
+        descriptor_output_key: Optional[str] = None,
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
@@ -50,9 +51,12 @@ class Atomwise(nn.Module):
         self.output_key = output_key
         self.model_outputs = [output_key]
         self.per_atom_output_key = per_atom_output_key
-
+        self.descriptor_output_key = descriptor_output_key
         if self.per_atom_output_key is not None:
             self.model_outputs.append(self.per_atom_output_key)
+        if self.descriptor_output_key is not None: 
+            self.model_outputs.append(self.descriptor_output_key)
+
         self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
@@ -134,6 +138,9 @@ class Atomwise(nn.Module):
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
             data[self.per_atom_output_key] = y
+
+        if self.descriptor_output_key is not None:
+            data[self.descriptor_output_key] = features
 
         # aggregate
         if self.aggregation_mode is not None:
