@@ -35,6 +35,7 @@ class Cace(nn.Module):
         max_l: int,
         max_nu: int,
         num_message_passing: int,
+        node_encoder: Optional[nn.Module] = None,
         type_message_passing: List[str] = ["M", "Ar", "Bchi"],
         args_message_passing: Dict[str, Any] = {"M": {}, "Ar": {}, "Bchi": {}},
         embed_receiver_nodes: bool = False,
@@ -70,7 +71,13 @@ class Cace(nn.Module):
         self.mp_norm_factor = 1.0/(avg_num_neighbors)**0.5 # normalization factor for message passing
 
         # layers
-        self.node_onehot = NodeEncoder(self.zs)
+        if node_encoder is None:
+            self.node_onehot = NodeEncoder(self.zs)
+            self.nz = len(zs) # number of elements
+        else:
+            self.node_onehot = node_encoder
+            self.nz = node_encoder.embedding_dim
+
         # sender node embedding
         self.node_embedding_sender = NodeEmbedding(
                          node_dim=self.nz, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[0]

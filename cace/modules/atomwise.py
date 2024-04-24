@@ -29,6 +29,7 @@ class Atomwise(nn.Module):
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
+        post_process: Optional[Callable] = None
     ):
         """
         Args:
@@ -74,6 +75,7 @@ class Atomwise(nn.Module):
         self.residual = residual
         self.use_batchnorm = use_batchnorm
         self.add_linear_nn = add_linear_nn
+        self.post_process = post_process
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -97,7 +99,10 @@ class Atomwise(nn.Module):
         else:
             self.outnet = None
 
-    def forward(self, data: Dict[str, torch.Tensor], training: bool = None) -> Dict[str, torch.Tensor]:
+    def forward(self, 
+                data: Dict[str, torch.Tensor], 
+                training: bool = None,
+               ) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feats']
         features = features.reshape(features.shape[0], -1)
@@ -153,5 +158,7 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / torch.bincount(data['batch'])
 
+        if hasattr(self, "self.post_process") and self.post_process is not None:
+            y = self.post_process(y)
         data[self.output_key] = y
         return data
