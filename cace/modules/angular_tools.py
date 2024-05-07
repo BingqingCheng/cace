@@ -1,6 +1,4 @@
 import itertools
-from collections import defaultdict
-from itertools import permutations
 import torch
 from .angular import l1l2_factorial_coef, lxlylz_factorial_coef, make_lxlylz
 
@@ -29,29 +27,6 @@ def no_repeats(*lists):
     combined = sum(lists, [])
     return len(combined) == len(set(combined))
 
-def combine_and_sum(entries):
-    combined_entries = defaultdict(int)
-    result = []
-    for entry in entries:
-        prefactor = entry[-1]
-        sorted_vectors = tuple(sorted(map(tuple, entry[:-1])))
-        combined_entries[sorted_vectors] += prefactor
-    for vectors, prefactor in combined_entries.items():
-        result.append((*map(list, vectors), prefactor))
-    return result
-
-def gen_lxlylz_combo(l_max, remove_zero=False):
-    all_lxlylz = []
-    if l_max <= 0:
-        return all_lxlylz
-    for lx, ly, lz in itertools.product(range(l_max+1), repeat=3):
-        l = lx + ly + lz
-        if l <= l_max:
-           if remove_zero and l == 0:
-               continue
-           all_lxlylz.append([lx, ly, lz, l])
-    return all_lxlylz
-
 def find_combo_vectors_l1l2(l_max):
     vec_dict = {}
     for lx1, ly1, lz1 in itertools.product(range(l_max+1), repeat=3):
@@ -78,7 +53,8 @@ def find_combo_vectors_nu2(l_max):
     prefactors = []
     vec_dict = {}
     
-    for L in range(1, l_max+1):
+    L_list = range(1, l_max+1)
+    for i, L in enumerate(L_list):
         for lxlylz_now in make_lxlylz(L):
             lx, ly, lz = lxlylz_now
             prefactor = lxlylz_factorial_coef(lxlylz_now)
@@ -109,25 +85,17 @@ def find_combo_vectors_nu2(l_max):
 
 def find_combo_vectors_nu3(l_max):
     vec_dict = {}
-
-    for dl1 in range(1, l_max):
-        dl2_max = min(dl1, l_max - dl1)
-        for dl2 in range(1, dl2_max+1):
-            dl3_max = min(dl2, l_max - dl1, l_max - dl2)
-            for dl3 in range(0, dl3_max+1):
-                for dlxlylz1 in make_lxlylz(dl1):
-                    for dlxlylz2 in make_lxlylz(dl2):
-                        for dlxlylz3 in make_lxlylz(dl3):
-                            lxlylz1 = [sum(x) for x in zip(dlxlylz1, dlxlylz2)]
-                            lxlylz2 = [sum(x) for x in zip(dlxlylz1, dlxlylz3)]
-                            lxlylz3 = [sum(x) for x in zip(dlxlylz2, dlxlylz3)]
-                            prefactor = lxlylz_factorial_coef(dlxlylz1)*lxlylz_factorial_coef(dlxlylz2)*lxlylz_factorial_coef(dlxlylz3)
-                            #key = (dl1 + dl2, dl1 + dl3, dl2 + dl3)
-                            key = (dl1, dl2, dl3)
-                            vec_dict[key] = vec_dict.get(key, []) + [(lxlylz1, lxlylz2, lxlylz3, prefactor)]
-
-    for key in vec_dict:
-        vec_dict[key] = combine_and_sum(vec_dict[key])
+    for lx1, ly1, lz1 in itertools.product(range(l_max+1), repeat=3):
+        l1 = lx1 + ly1 + lz1
+        if 0 < (lx1 + ly1 + lz1) <= l_max:
+            for lx2, ly2, lz2 in itertools.product(range(l_max+1), repeat=3):
+                l2 = lx2 + ly2 + lz2
+                if (lx1 + ly1 + lz1) <= (lx2 + ly2 + lz2) <= l_max:
+                    lx3, ly3, lz3 = lx1 + lx2, ly1 + ly2, lz1 + lz2
+                    if (lx3 + ly3 + lz3) <= l_max:
+                        prefactor = lxlylz_factorial_coef([lx1, ly1, lz1])*lxlylz_factorial_coef([lx2, ly2, lz2])
+                        key = (l1 ,l2)
+                        vec_dict[key] = vec_dict.get(key, []) + [([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3], prefactor)]
 
     vectors = []
     prefactors = []
@@ -154,37 +122,24 @@ def find_combo_vectors_nu3(l_max):
 
 def find_combo_vectors_nu4(l_max):
     vec_dict = {}
-    for dl1 in range(1, l_max):
-        dl2_max = min(dl1, l_max - dl1)
-        for dl2 in range(1, dl2_max+1):
-            dl3_max = min(dl2, l_max - dl2)
-            for dl3 in range(1, dl3_max+1):
-                dl4_max = min(dl3, l_max - dl1)
-                for dl4 in range(0, dl4_max+1):
-                    cl1_max = min(l_max - dl1 - dl4, l_max - dl2 - dl3)
-                    cl2_max = min(l_max - dl1 - dl2, l_max - dl2 - dl4)
-                    for cl1 in range(0, cl1_max+1):
-                        for cl2 in range(0, cl2_max+1):
-
-                            for dlxlylz1 in make_lxlylz(dl1):
-                                for dlxlylz2 in make_lxlylz(dl2):
-                                    for dlxlylz3 in make_lxlylz(dl3):
-                                        for dlxlylz4 in make_lxlylz(dl4):
-                                            for clxlylz1 in make_lxlylz(cl1):
-                                                for clxlylz2 in make_lxlylz(cl2):
-                                                    lxlylz1 = [sum(x) for x in zip(dlxlylz4, dlxlylz1, clxlylz1)]
-                                                    lxlylz2 = [sum(x) for x in zip(dlxlylz1, dlxlylz2, clxlylz2)]
-                                                    lxlylz3 = [sum(x) for x in zip(dlxlylz2, dlxlylz3, clxlylz1)]
-                                                    lxlylz4 = [sum(x) for x in zip(dlxlylz3, dlxlylz4, clxlylz2)]
-                                                    prefactor = lxlylz_factorial_coef(dlxlylz1)*lxlylz_factorial_coef(dlxlylz2)*lxlylz_factorial_coef(dlxlylz3)*lxlylz_factorial_coef(dlxlylz4)*lxlylz_factorial_coef(clxlylz1)*lxlylz_factorial_coef(clxlylz2)
-                                                    #l1, l2, l3, l4 = sorted((sum(lxlylz1), sum(lxlylz2), sum(lxlylz3), sum(lxlylz4)))
-                                                    #if l1==l2 and l3==l4: continue
-                                                    #key = (l1, l2, l3, l4)
-                                                    key = (dl1, dl2, dl3, dl4, cl1, cl2)
-                                                    vec_dict[key] = vec_dict.get(key, []) + [(lxlylz1, lxlylz2, lxlylz3, lxlylz4,  prefactor)]
-
-    for key in vec_dict:
-        vec_dict[key] = combine_and_sum(vec_dict[key])
+    for lx1, ly1, lz1 in itertools.product(range(l_max + 1), repeat=3):
+        l1 = lx1 + ly1 + lz1
+        if 0 < l1 <= l_max:
+            for lx2, ly2, lz2 in itertools.product(range(l_max + 1), repeat=3):
+                l2 = lx2 + ly2 + lz2
+                if l1 < l2 <= l_max:  # Ensuring l2 is strictly greater than l1
+                    for dx, dy, dz in itertools.product(range(l_max + 1), repeat=3):
+                        dl = dx + dy + dz
+                        if dl >= 1:
+                            lx3, ly3, lz3 = lx1 + dx, ly1 + dy, lz1 + dz
+                            lx4, ly4, lz4 = lx2 + dx, ly2 + dy, lz2 + dz
+                            if (lx3 + ly3 + lz3) <= l_max and (lx4 + ly4 + lz4) <= l_max:
+                                prefactor = lxlylz_factorial_coef([lx1, ly1, lz1]) \
+                                    *lxlylz_factorial_coef([lx2, ly2, lz2]) \
+                                    *lxlylz_factorial_coef([dx, dy, dz])
+                                key = (l1 ,l2, dl)
+                                vec_dict[key] = vec_dict.get(key, []) + \
+                                [([lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3], [lx4, ly4, lz4], prefactor)]
 
     vectors = []
     prefactors = []
