@@ -177,6 +177,7 @@ class TrainingTask(nn.Module):
             checkpoint_path: Optional[str] = 'checkpoint.pt',
             checkpoint_stride: int = 10,            
             bestmodel_path: Optional[str] = 'best_model.pth',
+            print_stride: int = 1,
            ):
 
         best_val_loss = float('inf')
@@ -210,9 +211,11 @@ class TrainingTask(nn.Module):
                 val_loss = self.validate(val_loader)
                 for pg in self.optimizer.param_groups:
                     lr_now = pg["lr"]
-                    #print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
+                    if print_stride > 0 and self.global_step % print_stride == 0:
+                        print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
                     logging.info(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
-                #print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
+                if print_stride > 0 and self.global_step % print_stride == 0:
+                    print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 self.retrieve_metrics('train')
                 self.retrieve_metrics('val')

@@ -2,7 +2,7 @@ from typing import Optional, Dict, Union, Callable
 import torch
 import torch.nn as nn
 
-__all__ = ["GetLoss"]
+__all__ = ["GetLoss", "GetRegularizationLoss", "GetVarianceLoss"]
 
 class GetLoss(nn.Module):
     """
@@ -67,4 +67,43 @@ class GetLoss(nn.Module):
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(name={self.name}, loss_fn={self.loss_fn}, loss_weight={self.loss_weight})"
-            ) 
+            )
+
+class GetRegularizationLoss(nn.Module):
+    def __init__(self, loss_weight, model):
+        super().__init__()
+        self.loss_weight = loss_weight 
+        self.model = model
+
+    def forward(self,
+                *args,
+                ):
+        regularization_loss = 0.0
+        for param in self.model.parameters():
+            if param.requires_grad:
+                regularization_loss += torch.norm(param, p=2)
+        regularization_loss *= self.loss_weight
+        return regularization_loss
+
+class GetVarianceLoss(nn.Module):
+    def __init__(
+        self,
+        target_name: str,
+        loss_weight: float = 1.0,
+        name: Optional[str] = None,
+    ):
+        super().__init__()
+        self.target_name = target_name
+        self.loss_weight = loss_weight
+        self.name = name
+
+    def forward(self, pred: Dict[str, torch.Tensor], *args):
+
+        # Compute the variance along the first dimension (across different entries)
+        variances = torch.var(pred[self.target_name], dim=0)
+
+        # Calculate the mean of the variances
+        mean_variance = torch.mean(variances)
+        mean_variance = mean_variance * self.loss_weight
+
+        return mean_variance

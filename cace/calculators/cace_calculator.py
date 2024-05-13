@@ -108,8 +108,8 @@ class CACECalculator(Calculator):
             e0 = 0.0
         self.results["energy"] = (to_numpy(output[self.energy_key]) + e0) * self.energy_units_to_eV
         self.results["forces"] = to_numpy(output[self.forces_key]) * self.energy_units_to_eV / self.length_units_to_A
-        if self.compute_stress and output["stress"] is not None:
-            stress = to_numpy(output["stress"])
+        if self.compute_stress and output[self.stress_key] is not None:
+            stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:
             self.results["stress"] = (
                 stress * (self.energy_units_to_eV / self.length_units_to_A**3)

@@ -25,9 +25,11 @@ class Atomwise(nn.Module):
         aggregation_mode: str = "sum",
         output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
+        descriptor_output_key: Optional[str] = None,
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
+        post_process: Optional[Callable] = None
     ):
         """
         Args:
@@ -50,9 +52,12 @@ class Atomwise(nn.Module):
         self.output_key = output_key
         self.model_outputs = [output_key]
         self.per_atom_output_key = per_atom_output_key
-
+        self.descriptor_output_key = descriptor_output_key
         if self.per_atom_output_key is not None:
             self.model_outputs.append(self.per_atom_output_key)
+        if self.descriptor_output_key is not None: 
+            self.model_outputs.append(self.descriptor_output_key)
+
         self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
@@ -70,6 +75,7 @@ class Atomwise(nn.Module):
         self.residual = residual
         self.use_batchnorm = use_batchnorm
         self.add_linear_nn = add_linear_nn
+        self.post_process = post_process
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -93,7 +99,10 @@ class Atomwise(nn.Module):
         else:
             self.outnet = None
 
-    def forward(self, data: Dict[str, torch.Tensor], training: bool = None) -> Dict[str, torch.Tensor]:
+    def forward(self, 
+                data: Dict[str, torch.Tensor], 
+                training: bool = None,
+               ) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feats']
         features = features.reshape(features.shape[0], -1)
@@ -135,6 +144,9 @@ class Atomwise(nn.Module):
         if self.per_atom_output_key is not None:
             data[self.per_atom_output_key] = y
 
+        if self.descriptor_output_key is not None:
+            data[self.descriptor_output_key] = features
+
         # aggregate
         if self.aggregation_mode is not None:
             y = scatter_sum(
@@ -146,5 +158,8 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / torch.bincount(data['batch'])
 
+        # check if self has attribute post_process
+        if hasattr(self, 'post_process') and self.post_process is not None:
+            y = self.post_process(y)
         data[self.output_key] = y
         return data
