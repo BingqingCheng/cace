@@ -6,6 +6,7 @@ __all__ = [
     'NodeEncoder',
     'NodeEmbedding',
     'EdgeEncoder',
+    'EdgeEncoder_InterIntra',
     'NodeEncoder_with_interpolation',
     'ElementEncoder'
 ]
@@ -145,6 +146,7 @@ class EdgeEncoder(nn.Module):
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
                node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
+               *args, **kwargs
                ) -> torch.Tensor:
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
@@ -166,6 +168,30 @@ class EdgeEncoder(nn.Module):
             f"{self.__class__.__name__}(directed={self.directed})"
         )
 
+class EdgeEncoder_InterIntra(nn.Module):
+    def __init__(self, intramolecular=True):
+        super().__init__()
+        self.intramolecular = intramolecular
+
+    def forward(self,
+               edge_index: torch.Tensor,  # [2, n_edges]
+               node_type: torch.Tensor,  # [n_nodes, n_dims]
+               node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
+               molecular_index: torch.Tensor=None,  # [n_edges] 
+               ) -> torch.Tensor: # [n_edges, n_dims**2]
+        # Split the edge tensor into two parts for node1 and node2
+        node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
+        encoded_edges = torch.einsum('ki,kj->kij', node1, node2).flatten(start_dim=1)
+        intra_molecular = torch.eq(molecular_index[edge_index[0]], molecular_index[edge_index[1]])
+        if self.intramolecular:
+            return encoded_edges * intra_molecular.int()[:, None]
+        else:
+            return encoded_edges * (~intra_molecular).int()[:, None]
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(intramolecular={self.intramolecular})"
+        )        
 # https://en.wikipedia.org/wiki/Electron_shell
 electron_distribution_dict = {
     1: [0, 0, 0, 0, 0, 0, 1],    # Hydrogen

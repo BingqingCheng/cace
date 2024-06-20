@@ -20,7 +20,7 @@ def build_mlp(
     activation: Callable = F.silu,
     residual: bool = False,
     use_batchnorm: bool = False,
-    last_bias: bool = True,
+    bias: bool = True,
     last_zero_init: bool = False,
 ) -> nn.Module:
     """
@@ -77,7 +77,7 @@ def build_mlp(
     else:
         # assign a Dense layer (with activation function) to each hidden layer
         layers = [
-            Dense(n_neurons[i], n_neurons[i + 1], activation=activation, use_batchnorm=use_batchnorm,)
+            Dense(n_neurons[i], n_neurons[i + 1], activation=activation, use_batchnorm=use_batchnorm, bias=bias)
             for i in range(n_layers - 1)
         ]
 
@@ -90,12 +90,12 @@ def build_mlp(
                 n_neurons[-1],
                 activation=None,
                 weight_init=torch.nn.init.zeros_,
-                bias=last_bias,
+                bias=bias,
             )
         )
     else:
         layers.append(
-            Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=last_bias)
+            Dense(n_neurons[-2], n_neurons[-1], activation=None, bias=bias)
         )
     # put all layers together to make the network
     out_net = nn.Sequential(*layers)

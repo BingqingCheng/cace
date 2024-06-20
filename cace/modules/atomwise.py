@@ -21,6 +21,7 @@ class Atomwise(nn.Module):
         n_out: int = 1,
         n_hidden: Optional[Union[int, Sequence[int]]] = None,
         n_layers: int = 2,
+        bias: bool = True,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
         output_key: str = "energy",
@@ -76,6 +77,7 @@ class Atomwise(nn.Module):
         self.use_batchnorm = use_batchnorm
         self.add_linear_nn = add_linear_nn
         self.post_process = post_process
+        self.bias = bias
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -86,12 +88,13 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 residual=self.residual,
                 use_batchnorm=self.use_batchnorm,
+                bias=self.bias,
                 )
             if self.add_linear_nn:
                 self.linear_nn = Dense(
                    self.n_in, 
                    self.n_out,
-                   bias=True, 
+                   bias=self.bias,
                    activation=None, 
                    use_batchnorm=self.use_batchnorm,
                    ) 
@@ -121,13 +124,14 @@ class Atomwise(nn.Module):
                 activation=self.activation,
                 residual=self.residual,
                 use_batchnorm=self.use_batchnorm,
+                bias=self.bias,
                 )
             self.outnet = self.outnet.to(features.device)
             if self.add_linear_nn:
                 self.linear_nn = Dense(
                    self.n_in,
                    self.n_out,
-                   bias=True,
+                   bias=self.bias,
                    activation=None,
                    use_batchnorm=self.use_batchnorm,
                    )
@@ -158,8 +162,7 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / torch.bincount(data['batch'])
 
-        # check if self has attribute post_process
-        if hasattr(self, 'post_process') and self.post_process is not None:
+        if self.post_process is not None:
             y = self.post_process(y)
         data[self.output_key] = y
         return data

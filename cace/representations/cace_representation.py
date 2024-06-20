@@ -36,6 +36,7 @@ class Cace(nn.Module):
         max_nu: int,
         num_message_passing: int,
         node_encoder: Optional[nn.Module] = None,
+        edge_encoder: Optional[nn.Module] = None,
         type_message_passing: List[str] = ["M", "Ar", "Bchi"],
         args_message_passing: Dict[str, Any] = {"M": {}, "Ar": {}, "Bchi": {}},
         embed_receiver_nodes: bool = False,
@@ -89,7 +90,11 @@ class Cace(nn.Module):
         else:
             self.node_embedding_receiver = self.node_embedding_sender 
 
-        self.edge_coding = EdgeEncoder(directed=True) 
+        if edge_encoder is not None:
+            self.edge_coding = edge_encoder
+        else:
+            self.edge_coding = EdgeEncoder(directed=True) # default edge encoder
+
         self.n_edge_channels = n_atom_basis**2
 
         self.radial_basis = radial_basis
@@ -169,7 +174,8 @@ class Cace(nn.Module):
         ## get the edge type
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
                                          node_type=node_embedded_sender,
-                                         node_type_2=node_embedded_receiver,)
+                                         node_type_2=node_embedded_receiver,
+                                         molecular_index=data["molecular_index"],)
 
         # compute angular and radial terms
         edge_vectors, edge_lengths = get_edge_vectors_and_lengths(

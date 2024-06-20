@@ -21,6 +21,7 @@ Forces = np.ndarray  # [..., 3]
 Stress = np.ndarray  # [6, ]
 Virials = np.ndarray  # [3,3]
 Charges = np.ndarray  # [..., 1]
+Molecule_Index = np.ndarray  # [..., 1]
 Cell = np.ndarray  # [3,3]
 Pbc = tuple  # (3,)
 
@@ -34,6 +35,7 @@ class Configuration:
     positions: Positions  # Angstrom
     energy: Optional[float] = None  # eV
     forces: Optional[Forces] = None  # eV/Angstrom
+    molecular_index: Optional[Molecule_Index] = None # index of molecules
     stress: Optional[Stress] = None  # eV/Angstrom^3
     virials: Optional[Virials] = None  # eV
     dipole: Optional[Vector] = None  # Debye
@@ -74,6 +76,7 @@ def config_from_atoms_list(
     atoms_list: List[ase.Atoms],
     energy_key="energy",
     forces_key="forces",
+    molecular_index_key="molecular_index",
     stress_key="stress",
     virials_key="virials",
     dipole_key="dipole",
@@ -92,6 +95,7 @@ def config_from_atoms_list(
                 atoms,
                 energy_key=energy_key,
                 forces_key=forces_key,
+                molecular_index_key=molecular_index_key,
                 stress_key=stress_key,
                 virials_key=virials_key,
                 dipole_key=dipole_key,
@@ -107,6 +111,7 @@ def config_from_atoms(
     atoms: ase.Atoms,
     energy_key="energy",
     forces_key="forces",
+    molecular_index_key="molecular_index",
     stress_key="stress",
     virials_key="virials",
     dipole_key="dipole",
@@ -124,6 +129,7 @@ def config_from_atoms(
     if atomic_energies and energy is not None:
         energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
     forces = atoms.arrays.get(forces_key, None)  # eV / Ang
+    molecular_index = atoms.info.get(molecular_index_key, None) # index of molecules
     stress = atoms.info.get(stress_key, None)  # eV / Ang
     virials = atoms.info.get(virials_key, None)
     dipole = atoms.info.get(dipole_key, None)  # Debye
@@ -147,6 +153,8 @@ def config_from_atoms(
     if forces is None:
         forces = np.zeros(np.shape(atoms.positions))
         forces_weight = 0.0
+    if molecular_index is None:
+        molecular_index = np.zeros(len(atoms), dtype=int)
     if stress is None:
         stress = np.zeros(6)
         stress_weight = 0.0
@@ -159,6 +167,7 @@ def config_from_atoms(
         positions=atoms.get_positions(),
         energy=energy,
         forces=forces,
+        molecular_index=molecular_index,
         stress=stress,
         virials=virials,
         dipole=dipole,
@@ -179,6 +188,7 @@ def load_from_xyz(
     config_type_weights: Dict,
     energy_key: str = "energy",
     forces_key: str = "forces",
+    molecular_index_key: str = "molecular_index",
     stress_key: str = "stress",
     virials_key: str = "virials",
     dipole_key: str = "dipole",
@@ -195,6 +205,7 @@ def load_from_xyz(
         config_type_weights=config_type_weights,
         energy_key=energy_key,
         forces_key=forces_key,
+        molecular_index_key=molecular_index_key,
         stress_key=stress_key,
         virials_key=virials_key,
         dipole_key=dipole_key,

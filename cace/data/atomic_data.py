@@ -29,6 +29,7 @@ class AtomicData(torch_geometric.data.Data):
     unit_shifts: torch.Tensor
     cell: torch.Tensor
     forces: torch.Tensor
+    molecular_index: torch.Tensor
     energy: torch.Tensor
     stress: torch.Tensor
     virials: torch.Tensor
@@ -55,6 +56,7 @@ class AtomicData(torch_geometric.data.Data):
         stress_weight: Optional[torch.Tensor],  # [,]
         virials_weight: Optional[torch.Tensor],  # [,]
         forces: Optional[torch.Tensor],  # [n_nodes, 3]
+        molecular_index: Optional[torch.Tensor],  # [n_nodes]
         energy: Optional[torch.Tensor],  # [, ]
         stress: Optional[torch.Tensor],  # [1,3,3]
         virials: Optional[torch.Tensor],  # [1,3,3]
@@ -74,6 +76,7 @@ class AtomicData(torch_geometric.data.Data):
         assert virials_weight is None or len(virials_weight.shape) == 0
         assert cell is None or cell.shape == (3, 3)
         assert forces is None or forces.shape == (num_nodes, 3)
+        assert molecular_index is None or molecular_index.shape == (num_nodes,)
         assert energy is None or len(energy.shape) == 0
         assert stress is None or stress.shape == (1, 3, 3)
         assert virials is None or virials.shape == (1, 3, 3)
@@ -95,6 +98,7 @@ class AtomicData(torch_geometric.data.Data):
             "stress_weight": stress_weight,
             "virials_weight": virials_weight,
             "forces": forces,
+            "molecular_index": molecular_index,
             "energy": energy,
             "stress": stress,
             "virials": virials,
@@ -157,6 +161,13 @@ class AtomicData(torch_geometric.data.Data):
             if config.forces is not None
             else None
         )
+
+        molecular_index = (
+            torch.tensor(config.molecular_index, dtype=torch.long)
+            if config.molecular_index is not None
+            else None
+        )
+
         energy = (
             torch.tensor(config.energy, dtype=torch.get_default_dtype())
             if config.energy is not None
@@ -199,6 +210,7 @@ class AtomicData(torch_geometric.data.Data):
             stress_weight=stress_weight,
             virials_weight=virials_weight,
             forces=forces,
+            molecular_index=molecular_index,
             energy=energy,
             stress=stress,
             virials=virials,
