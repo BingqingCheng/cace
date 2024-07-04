@@ -9,7 +9,7 @@ from ase.calculators.calculator import Calculator, all_changes
 from ase.stress import full_3x3_to_voigt_6_stress
 
 from ..tools import torch_geometric, torch_tools, to_numpy
-from ..data import AtomicData, config_from_atoms
+from ..data import AtomicData
  
 __all__ = ["CACECalculator"]
 
@@ -85,11 +85,10 @@ class CACECalculator(Calculator):
         Calculator.calculate(self, atoms)
 
         # prepare data
-        config = config_from_atoms(atoms)
         data_loader = torch_geometric.dataloader.DataLoader(
             dataset=[
-                AtomicData.from_config(
-                    config, cutoff=self.cutoff
+                AtomicData.from_atoms(
+                    atoms, cutoff=self.cutoff
                 )
             ],
             batch_size=1,

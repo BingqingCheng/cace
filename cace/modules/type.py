@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Sequence
+from typing import Sequence, Dict
 
 __all__ = [
     'NodeEncoder',
@@ -169,16 +169,18 @@ class EdgeEncoder(nn.Module):
         )
 
 class EdgeEncoder_InterIntra(nn.Module):
-    def __init__(self, intramolecular=True):
+    def __init__(self, intramolecular=True, molecular_index_key="molecular_index"):
         super().__init__()
         self.intramolecular = intramolecular
+        self.molecular_index_key = molecular_index_key
 
     def forward(self,
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
+               data: Dict[str, torch.Tensor],
                node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
-               molecular_index: torch.Tensor=None,  # [n_edges] 
                ) -> torch.Tensor: # [n_edges, n_dims**2]
+        molecular_index = data[self.molecular_index_key]
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
         encoded_edges = torch.einsum('ki,kj->kij', node1, node2).flatten(start_dim=1)
@@ -192,6 +194,7 @@ class EdgeEncoder_InterIntra(nn.Module):
         return (
             f"{self.__class__.__name__}(intramolecular={self.intramolecular})"
         )        
+
 # https://en.wikipedia.org/wiki/Electron_shell
 electron_distribution_dict = {
     1: [0, 0, 0, 0, 0, 0, 1],    # Hydrogen

@@ -148,7 +148,7 @@ class Atomwise(nn.Module):
         if self.per_atom_output_key is not None:
             data[self.per_atom_output_key] = y
 
-        if self.descriptor_output_key is not None:
+        if hasattr(self, "descriptor_output_key") and self.descriptor_output_key is not None:
             data[self.descriptor_output_key] = features
 
         # aggregate
@@ -162,7 +162,7 @@ class Atomwise(nn.Module):
             if self.aggregation_mode == "avg":
                 y = y / torch.bincount(data['batch'])
 
-        if self.post_process is not None:
+        if hasattr(self, "post_process") and self.post_process is not None:
             y = self.post_process(y)
         data[self.output_key] = y
         return data

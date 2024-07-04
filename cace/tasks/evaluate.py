@@ -7,7 +7,7 @@ from ase import Atoms
 from ase.io import read, write
 
 from ..tools import torch_geometric, torch_tools, to_numpy
-from ..data import AtomicData, config_from_atoms
+from ..data import AtomicData
 
 __all__ = ["EvaluateTask"]
 
@@ -89,11 +89,10 @@ class EvaluateTask(nn.Module):
                 stresses_list.append(to_numpy(output[self.stress_key]))
 
         elif isinstance(data, Atoms):
-            config = config_from_atoms(data)
             data_loader = torch_geometric.dataloader.DataLoader(
                 dataset=[
-                        AtomicData.from_config(
-                        config, cutoff=self.cutoff
+                        AtomicData.from_atoms(
+                        data, cutoff=self.cutoff
                         )
                 ],
                 batch_size=1,

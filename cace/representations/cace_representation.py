@@ -175,7 +175,7 @@ class Cace(nn.Module):
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
                                          node_type=node_embedded_sender,
                                          node_type_2=node_embedded_receiver,
-                                         molecular_index=data["molecular_index"],)
+                                         data=data)
 
         # compute angular and radial terms
         edge_vectors, edge_lengths = get_edge_vectors_and_lengths(

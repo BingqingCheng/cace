@@ -7,6 +7,8 @@ from .torch_tools import (
     tensor_dict_to_device,
 )
 
+#from .slurm_distributed import *
+
 from .scatter import scatter_sum
 
 from .metric import *

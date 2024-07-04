@@ -4,8 +4,9 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Optional, Sequence
-
+from typing import Optional, Sequence, Dict
+from ase import Atoms
+import numpy as np
 #import torch_geometric
 from ..tools import torch_geometric
 import torch.nn as nn
@@ -13,8 +14,21 @@ import torch.utils.data
 from ..tools import voigt_to_matrix
 
 from .neighborhood import get_neighborhood
-from .utils import Configuration
 
+default_data_key = {
+    "energy": "energy",
+    "forces": "forces",
+    "molecular_index": "molecular_index",
+    "stress": "stress",
+    "virials": "virials",
+    "dipole":  None,
+    "charges": None,
+    "weights": None,
+    "energy_weight": None,
+    "force_weight": None,
+    "stress_weight": None,
+    "virial_weight": None,
+}
 
 class AtomicData(torch_geometric.data.Data):
     atomic_numbers: torch.Tensor
@@ -50,18 +64,14 @@ class AtomicData(torch_geometric.data.Data):
         shifts: torch.Tensor,  # [n_edges, 3],
         unit_shifts: torch.Tensor,  # [n_edges, 3]
         cell: Optional[torch.Tensor],  # [3,3]
-        weight: Optional[torch.Tensor],  # [,]
-        energy_weight: Optional[torch.Tensor],  # [,]
-        forces_weight: Optional[torch.Tensor],  # [,]
-        stress_weight: Optional[torch.Tensor],  # [,]
-        virials_weight: Optional[torch.Tensor],  # [,]
         forces: Optional[torch.Tensor],  # [n_nodes, 3]
         molecular_index: Optional[torch.Tensor],  # [n_nodes]
         energy: Optional[torch.Tensor],  # [, ]
         stress: Optional[torch.Tensor],  # [1,3,3]
         virials: Optional[torch.Tensor],  # [1,3,3]
-        dipole: Optional[torch.Tensor],  # [, 3]
-        charges: Optional[torch.Tensor],  # [n_nodes, ]
+        additional_info: Optional[Dict], 
+        #dipole: Optional[torch.Tensor],  # [, 3]
+        #charges: Optional[torch.Tensor],  # [n_nodes, ]
     ):
         # Check shapes
         #assert num_nodes == atomic_numbers.shape[0]
@@ -69,19 +79,14 @@ class AtomicData(torch_geometric.data.Data):
         assert positions.shape == (num_nodes, 3)
         assert shifts.shape[1] == 3
         assert unit_shifts.shape[1] == 3
-        assert weight is None or len(weight.shape) == 0
-        assert energy_weight is None or len(energy_weight.shape) == 0
-        assert forces_weight is None or len(forces_weight.shape) == 0
-        assert stress_weight is None or len(stress_weight.shape) == 0
-        assert virials_weight is None or len(virials_weight.shape) == 0
         assert cell is None or cell.shape == (3, 3)
         assert forces is None or forces.shape == (num_nodes, 3)
         assert molecular_index is None or molecular_index.shape == (num_nodes,)
         assert energy is None or len(energy.shape) == 0
         assert stress is None or stress.shape == (1, 3, 3)
         assert virials is None or virials.shape == (1, 3, 3)
-        assert dipole is None or dipole.shape[-1] == 3
-        assert charges is None or charges.shape == (num_nodes,)
+        #assert dipole is None or dipole.shape[-1] == 3
+        #assert charges is None or charges.shape == (num_nodes,)
         # Aggregate data
         data = {
             "num_nodes": num_nodes,
@@ -92,130 +97,119 @@ class AtomicData(torch_geometric.data.Data):
             "cell": cell,
             "atomic_numbers": atomic_numbers,
             "num_nodes": num_nodes,
-            "weight": weight,
-            "energy_weight": energy_weight,
-            "forces_weight": forces_weight,
-            "stress_weight": stress_weight,
-            "virials_weight": virials_weight,
             "forces": forces,
             "molecular_index": molecular_index,
             "energy": energy,
             "stress": stress,
             "virials": virials,
-            "dipole": dipole,
-            "charges": charges,
+            #"dipole": dipole,
+            #"charges": charges,
         }
+        data.update(additional_info)
         super().__init__(**data)
 
     @classmethod
-    def from_config(
-        cls, config: Configuration, 
-        cutoff: float, 
+    def from_atoms(
+        cls,
+        atoms: Atoms, 
+        cutoff: float,
+        data_key: Dict[str, str] = None,
+        atomic_energies: Optional[Dict[int, float]] = None,
     ) -> "AtomicData":
-        edge_index, shifts, unit_shifts  = get_neighborhood(
-            positions=config.positions, cutoff=cutoff, pbc=config.pbc, cell=config.cell
-        )
-  
-        atomic_numbers = torch.tensor(config.atomic_numbers, dtype=torch.long)
+        if data_key is not None:
+            data_key = default_data_key.update(data_key)
+        data_key = default_data_key
+        positions = atoms.get_positions()
+        pbc = tuple(atoms.get_pbc())
+        cell = np.array(atoms.get_cell())
+        atomic_numbers = atoms.get_atomic_numbers()
 
+        edge_index, shifts, unit_shifts = get_neighborhood(
+            positions=positions,
+            cutoff=cutoff,
+            pbc=pbc,
+            cell=cell
+        )
+
+        energy = atoms.info.get(data_key["energy"], None)  # eV
+        # subtract atomic energies if available
+        if atomic_energies and energy is not None:
+            energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
+        forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
+        molecular_index = atoms.info.get(data_key["molecular_index"], None) # index of molecules
+        stress = atoms.info.get(data_key["stress"], None)  # eV / Ang
+        virials = atoms.info.get(data_key["virials"], None)
+
+        # process these to make tensors
         cell = (
-            torch.tensor(config.cell, dtype=torch.get_default_dtype())
-            if config.cell is not None
+            torch.tensor(cell, dtype=torch.get_default_dtype())
+            if cell is not None
             else torch.tensor(
                 3 * [0.0, 0.0, 0.0], dtype=torch.get_default_dtype()
             ).view(3, 3)
         )
 
-        weight = (
-            torch.tensor(config.weight, dtype=torch.get_default_dtype())
-            if config.weight is not None
-            else 1
-        )
-
-        energy_weight = (
-            torch.tensor(config.energy_weight, dtype=torch.get_default_dtype())
-            if config.energy_weight is not None
-            else 1
-        )
-
-        forces_weight = (
-            torch.tensor(config.forces_weight, dtype=torch.get_default_dtype())
-            if config.forces_weight is not None
-            else 1
-        )
-
-        stress_weight = (
-            torch.tensor(config.stress_weight, dtype=torch.get_default_dtype())
-            if config.stress_weight is not None
-            else 1
-        )
-
-        virials_weight = (
-            torch.tensor(config.virials_weight, dtype=torch.get_default_dtype())
-            if config.virials_weight is not None
-            else 1
-        )
-
         forces = (
-            torch.tensor(config.forces, dtype=torch.get_default_dtype())
-            if config.forces is not None
+            torch.tensor(forces, dtype=torch.get_default_dtype())
+            if forces is not None
             else None
         )
 
         molecular_index = (
-            torch.tensor(config.molecular_index, dtype=torch.long)
-            if config.molecular_index is not None
+            torch.tensor(molecular_index, dtype=torch.long)
+            if molecular_index is not None
             else None
         )
 
         energy = (
-            torch.tensor(config.energy, dtype=torch.get_default_dtype())
-            if config.energy is not None
+            torch.tensor(energy, dtype=torch.get_default_dtype())
+            if energy is not None
             else None
         )
         stress = (
             voigt_to_matrix(
-                torch.tensor(config.stress, dtype=torch.get_default_dtype())
+                torch.tensor(stress, dtype=torch.get_default_dtype())
             ).unsqueeze(0)
-            if config.stress is not None
+            if stress is not None
             else None
         )
         virials = (
-            torch.tensor(config.virials, dtype=torch.get_default_dtype()).unsqueeze(0)
-            if config.virials is not None
-            else None
-        )
-        dipole = (
-            torch.tensor(config.dipole, dtype=torch.get_default_dtype()).unsqueeze(0)
-            if config.dipole is not None
-            else None
-        )
-        charges = (
-            torch.tensor(config.charges, dtype=torch.get_default_dtype())
-            if config.charges is not None
+            torch.tensor(virials, dtype=torch.get_default_dtype()).unsqueeze(0)
+            if virials is not None
             else None
         )
 
+        #  obtain additional info
+        # enumerate the data_key and extract data
+        additional_info = {}
+        for key, kk in data_key.items():
+            if kk is None or key in ['energy', 'forces', 'stress', 'virial', 'molecular_index']:
+                continue
+            else:
+                more_info = atoms.info.get(data_key[kk], None)
+                if more_info is None:
+                    more_info = atoms.arrays.get(data_key[kk], None)
+                more_info = (
+                    torch.tensor(more_info, dtype=torch.get_default_dtype()).unsqueeze(0)
+                    if more_info is not None
+                    else None
+                )
+            additional_info[key] = more_info
+
         return cls(
             edge_index=torch.tensor(edge_index, dtype=torch.long),
-            positions=torch.tensor(config.positions, dtype=torch.get_default_dtype()),
+            positions=torch.tensor(positions, dtype=torch.get_default_dtype()),
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
-            atomic_numbers=atomic_numbers,
+            atomic_numbers=torch.tensor(atomic_numbers, dtype=torch.long),
             num_nodes=atomic_numbers.shape[0],
-            weight=weight,
-            energy_weight=energy_weight,
-            forces_weight=forces_weight,
-            stress_weight=stress_weight,
-            virials_weight=virials_weight,
             forces=forces,
             molecular_index=molecular_index,
             energy=energy,
             stress=stress,
             virials=virials,
-            dipole=dipole,
-            charges=charges,
+            additional_info=additional_info,
         )
 
 
