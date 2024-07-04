@@ -136,7 +136,7 @@ class AtomicData(torch_geometric.data.Data):
         if atomic_energies and energy is not None:
             energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
         forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
-        molecular_index = atoms.info.get(data_key["molecular_index"], None) # index of molecules
+        molecular_index = atoms.arrays.get(data_key["molecular_index"], None) # index of molecules
         stress = atoms.info.get(data_key["stress"], None)  # eV / Ang
         virials = atoms.info.get(data_key["virials"], None)
 
