@@ -26,21 +26,19 @@ def main():
     collection = cace.tasks.get_dataset_from_xyz(
         train_path=args.train_path,
         valid_fraction=args.valid_fraction,
-        energy_key=args.energy_key,
-        forces_key=args.forces_key,
-        atomic_energies=avge0)
+        data_key={'energy': args.energy_key, 'forces': args.forces_key},
+        atomic_energies=avge0,
+        cutoff=args.cutoff)
 
     train_loader = cace.tasks.load_data_loader(
         collection=collection,
         data_type='train',
-        batch_size=args.batch_size,
-        cutoff=args.cutoff)
+        batch_size=args.batch_size)
 
     valid_loader = cace.tasks.load_data_loader(
         collection=collection,
         data_type='valid',
-        batch_size=args.valid_batch_size,
-        cutoff=args.cutoff)
+        batch_size=args.valid_batch_size)
 
     # Configure CACE Representation
     cutoff_fn = PolynomialCutoff(cutoff=args.cutoff, p=args.cutoff_fn_p)
