@@ -18,7 +18,9 @@ Please refer to the `setup.py` file for installation instructions.
 
 ## Usage
 
-Example scripts can be found in [https://github.com/BingqingCheng/cacefit].
+Please refer to the `scripts/train.py`.
+
+More example scripts can be found in [https://github.com/BingqingCheng/cacefit].
 
 ## License
 
