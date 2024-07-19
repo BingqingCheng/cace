@@ -38,8 +38,8 @@ def parse_arguments():
     # Atomwise Module Configuration
     parser.add_argument('--atomwise_layers', type=int, default=3, help='Number of layers in the atomwise module')
     parser.add_argument('--atomwise_hidden', type=int, nargs='+', default=[32, 16], help='Hidden units in each layer of the atomwise module')
-    parser.add_argument('--atomwise_residual', action='store_true', help='Use residual connections in the atomwise module')
-    parser.add_argument('--atomwise_batchnorm', action='store_true', help='Use batch normalization in the atomwise module')
+    parser.add_argument('--atomwise_residual', action='store_false', help='Use residual connections in the atomwise module')
+    parser.add_argument('--atomwise_batchnorm', action='store_false', help='Use batch normalization in the atomwise module')
     parser.add_argument('--atomwise_linear_nn', action='store_true', help='Add a linear neural network layer in the atomwise module')
 
     # Training Procedure Configuration
@@ -50,7 +50,7 @@ def parse_arguments():
     parser.add_argument('--ema', action='store_true', help='Use exponential moving average of model parameters')
     parser.add_argument('--ema_start', type=int, default=10, help='Start using EMA after this many steps')
     parser.add_argument('--warmup_steps', type=int, default=10, help='Number of warmup steps for the optimizer')
-    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs for the first phase of training')
+    parser.add_argument('--epochs', type=int, default=200, help='Number of epochs for the first phase of training')
     parser.add_argument('--second_phase_epochs', type=int, default=100, help='Number of epochs for the second phase of training')
     parser.add_argument('--energy_loss_weight', type=float, default=1.0, help='Weight for the energy loss in phase 1')
     parser.add_argument('--force_loss_weight', type=float, default=1000.0, help='Weight for the force loss in both phases')
