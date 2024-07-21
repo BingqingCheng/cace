@@ -28,6 +28,16 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Citation
 
+@article{cheng2024cartesian,
+  title={Cartesian atomic cluster expansion for machine learning interatomic potentials},
+  author={Cheng, Bingqing},
+  journal={npj Computational Materials},
+  volume={10},
+  number={1},
+  pages={157},
+  year={2024},
+  publisher={Nature Publishing Group UK London}
+}
 
 ## Contact
 
