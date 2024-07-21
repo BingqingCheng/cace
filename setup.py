@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='CACE"',
+    name='CACE',
     version='0.1.0',
     author='Bingqing Cheng',
     author_email='tonicbq@gmail.com',
@@ -10,7 +10,7 @@ setup(
     install_requires=[
         'numpy',
         'ase',
-        'PyTorch',
+        'torch',
         'matscipy',
     ],
     classifiers=[

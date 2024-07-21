@@ -2,6 +2,8 @@ import torch
 import logging
 import ase.io
 import cace
+import pickle
+import os
 from cace.representations import Cace
 from cace.modules import PolynomialCutoff, BesselRBF, Atomwise, Forces
 from cace.models.atomistic import NeuralNetworkPotential
@@ -19,8 +21,15 @@ def main():
         xyz = ase.io.read(args.train_path, ':')
         args.zs = get_unique_atomic_number(xyz)
 
-    # Load Dataset
-    avge0 = compute_average_E0s(xyz)
+# load the avge0 dict from a file if possible
+    if os.path.exists('avge0.pkl'):
+        with open('avge0.pkl', 'rb') as f:
+            avge0 = pickle.load(f)
+    else:
+        # Load Dataset
+        avge0 = compute_average_E0s(xyz)
+        with open('avge0.pkl', 'wb') as f:
+            pickle.dump(avge0, f)
 
     # Prepare Data Loaders
     collection = cace.tasks.get_dataset_from_xyz(
@@ -97,7 +106,7 @@ def main():
             scheduler_args=scheduler_args, max_grad_norm=args.max_grad_norm, ema=args.ema,
             ema_start=args.ema_start, warmup_steps=args.warmup_steps)
 
-        task.fit(train_loader, valid_loader, epochs=int(args.epochs/args.num_restart))
+        task.fit(train_loader, valid_loader, epochs=int(args.epochs/args.num_restart), print_stride=0)
     task.save_model(args.prefix+'_phase_1.pth')
 
     # Phase 2 Training Adjustment

@@ -103,9 +103,9 @@ class TrainingTask(nn.Module):
         for metric in self.metrics:
             metric.update_metrics(subset, pred, batch)
 
-    def retrieve_metrics(self, subset):
+    def retrieve_metrics(self, subset, print_log: bool = False):
         for metric in self.metrics:
-            metric.retrieve_metrics(subset)
+            metric.retrieve_metrics(subset, print_log=print_log)
 
     def train_step(self, batch, screen_nan: bool = True):
         torch.set_grad_enabled(True)
@@ -207,18 +207,22 @@ class TrainingTask(nn.Module):
                self.swa_model.update_parameters(self.model)
 
             # validate
+            if print_stride > 0 and self.global_step % print_stride == 0:
+                screen_output = True
+            else:
+                screen_output = False
             if epoch % val_stride == 0:
                 val_loss = self.validate(val_loader)
                 for pg in self.optimizer.param_groups:
                     lr_now = pg["lr"]
-                    if print_stride > 0 and self.global_step % print_stride == 0:
+                    if screen_output:
                         print(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
                     logging.info(f"##### Step: {self.global_step} Learning rate: {lr_now} #####")
-                if print_stride > 0 and self.global_step % print_stride == 0:
+                if screen_output:
                     print(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
                 logging.info(f'Epoch {epoch}, Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}')
-                self.retrieve_metrics('train')
-                self.retrieve_metrics('val')
+                self.retrieve_metrics('train', print_log=screen_output)
+                self.retrieve_metrics('val', print_log=screen_output)
 
             if self.swa and self.global_step >= self.swa_start:
                self.swa_scheduler.step()
