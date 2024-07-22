@@ -130,7 +130,8 @@ class NeuralNetworkPotential(AtomisticModel):
                 data: Dict[str, torch.Tensor], 
                 training: bool = False, 
                 compute_stress: bool = False, 
-                compute_virials: bool = False
+                compute_virials: bool = False,
+                output_index: int = None, # only used for multiple-head output
                 ) -> Dict[str, torch.Tensor]:
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
@@ -143,7 +144,7 @@ class NeuralNetworkPotential(AtomisticModel):
         data = self.representation(data)
 
         for m in self.output_modules:
-            data = m(data, training=training)
+            data = m(data, training=training, output_index=output_index)
 
         # apply postprocessing (if enabled)
         data = self.postprocess(data)
@@ -204,12 +205,13 @@ class CombinePotential(nn.Module):
                 data: Dict[str, torch.Tensor],
                 training: bool = False,
                 compute_stress: bool = False,
-                compute_virials: bool = False
+                compute_virials: bool = False,
+                output_index: int = None, # only used for multiple-head output
                 ) -> Dict[str, torch.Tensor]:
         results = {}
         output = {}
         for i, potential in enumerate(self.models):
-            result = potential(data, training, compute_stress, compute_virials)
+            result = potential(data, training, compute_stress, compute_virials, output_index)
             results[i] = result
             output.update(result)
             

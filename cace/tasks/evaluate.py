@@ -114,13 +114,12 @@ class EvaluateTask(nn.Module):
         elif isinstance(data, list):
             if not isinstance(data[0], Atoms):
                raise ValueError("Input data must be a list of ASE Atoms objects")
-            configs = [config_from_atoms(atoms) for atoms in data]
             data_loader = torch_geometric.dataloader.DataLoader(
                 dataset=[
-		    AtomicData.from_config(
-			config, cutoff=self.cutoff
+		    AtomicData.from_atoms(
+			atom, cutoff=self.cutoff
 		    )
-		    for config in configs
+		    for atom in data
 		],
 		batch_size=batch_size,
 		shuffle=False,

@@ -32,6 +32,7 @@ class Metrics(nn.Module):
         self,
         target_name: str,
         predict_name: Optional[str] = None,
+        output_index: Optional[int] = None, # used for multi-task learning
         name: Optional[str] = None,
         metric_keys: List[str] = ["mae", "rmse"],
         per_atom: bool = False,
@@ -48,6 +49,7 @@ class Metrics(nn.Module):
         super().__init__()
         self.target_name = target_name
         self.predict_name = predict_name or target_name
+        self.output_index = output_index
         self.name = name or target_name
 
         self.per_atom = per_atom
@@ -64,6 +66,8 @@ class Metrics(nn.Module):
                 target: Optional[Dict[str, torch.Tensor]] = None,
                ):
         pred_tensor = pred[self.predict_name].clone().detach()
+        if self.output_index is not None:
+            pred_tensor = pred_tensor[:, self.output_index]
         if target is not None:
             target_tensor = target[self.target_name].clone().detach()
         elif self.predict_name != self.target_name:

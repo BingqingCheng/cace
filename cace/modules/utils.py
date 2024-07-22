@@ -13,17 +13,31 @@ __all__ = ["get_outputs", "get_edge_vectors_and_lengths", "get_edge_node_type", 
 def compute_forces(
     energy: torch.Tensor, positions: torch.Tensor, training: bool = False
 ) -> torch.Tensor:
-    grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
-    gradient = torch.autograd.grad(
-        outputs=[energy],  # [n_graphs, ]
-        inputs=[positions],  # [n_nodes, 3]
-        grad_outputs=grad_outputs,
-        retain_graph=training,  # Make sure the graph is not destroyed during training
-        create_graph=training,  # Create graph for second derivative
-        allow_unused=True,  # For complete dissociation turn to true
-    )[
-        0
-    ]  # [n_nodes, 3]
+    # check the dimension of the energy tensor
+    if len(energy.shape) == 1:
+        grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
+        gradient = torch.autograd.grad(
+            outputs=[energy],  # [n_graphs, ]
+            inputs=[positions],  # [n_nodes, 3]
+            grad_outputs=grad_outputs,
+            retain_graph=training,  # Make sure the graph is not destroyed during training
+            create_graph=training,  # Create graph for second derivative
+            allow_unused=True,  # For complete dissociation turn to true
+        )[0]  # [n_nodes, 3]
+    else:
+        num_energy = energy.shape[1]
+        grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy[:,0])]
+        gradient = torch.stack([ 
+            torch.autograd.grad(
+                outputs=[energy[:,i]],  # [n_graphs, ]
+                inputs=[positions],  # [n_nodes, 3]
+                grad_outputs=grad_outputs,
+                retain_graph=(training or (i < num_energy - 1)),  # Make sure the graph is not destroyed during training
+                create_graph=(training or (i < num_energy - 1)),  # Create graph for second derivative
+                allow_unused=True,  # For complete dissociation turn to true
+                )[0] for i in range(num_energy) 
+           ], axis=2)  # [n_nodes, 3, num_energy]
+
     if gradient is None:
         return torch.zeros_like(positions)
     return -1 * gradient
@@ -38,7 +52,7 @@ def compute_forces_virials(
     compute_stress: bool = False,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
     grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
-    forces, virials = torch.autograd.grad(
+    gradient, virials = torch.autograd.grad(
         outputs=[energy],  # [n_graphs, ]
         inputs=[positions, displacement],  # [n_nodes, 3]
         grad_outputs=grad_outputs,
@@ -55,12 +69,12 @@ def compute_forces_virials(
             torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
         ).unsqueeze(-1)
         stress = virials / volume.view(-1, 1, 1)
-    if forces is None:
-        forces = torch.zeros_like(positions)
+    if gradient is None:
+        gradient = torch.zeros_like(positions)
     if virials is None:
         virials = torch.zeros((1, 3, 3))
 
-    return -1 * forces, -1 * virials, stress
+    return -1 * gradient, -1 * virials, stress
 
 def get_symmetric_displacement(
     positions: torch.Tensor,

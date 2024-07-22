@@ -105,6 +105,7 @@ class Atomwise(nn.Module):
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
                 training: bool = None,
+                output_index: int = None, # only used for multi-head output
                ) -> Dict[str, torch.Tensor]:
         # reshape the feature vectors
         features = data['node_feats']
@@ -164,5 +165,5 @@ class Atomwise(nn.Module):
 
         if hasattr(self, "post_process") and self.post_process is not None:
             y = self.post_process(y)
-        data[self.output_key] = y
+        data[self.output_key] = y[:, output_index] if output_index is not None else y
         return data

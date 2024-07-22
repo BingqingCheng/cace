@@ -13,6 +13,7 @@ class GetLoss(nn.Module):
         self,
         target_name: str,
         predict_name: Optional[str] = None,
+        output_index: Optional[int] = None, # only used for multi-output models
         name: Optional[str] = None,
         loss_fn: Optional[nn.Module] = None,
         loss_weight: Union[float, Callable] = 1.0, # Union[float, Callable] means that the type can be either float or callable
@@ -31,6 +32,7 @@ class GetLoss(nn.Module):
         super().__init__()
         self.target_name = target_name
         self.predict_name = predict_name or target_name
+        self.output_index = output_index
         self.name = name or target_name
         self.loss_fn = loss_fn
         # the loss_weight can either be a float or a callable        
@@ -54,11 +56,13 @@ class GetLoss(nn.Module):
 
         if target is not None:
             loss = loss_weight * self.loss_fn(
-                pred[self.predict_name], target[self.target_name]
+                pred[self.predict_name] if self.output_index is None else pred[self.predict_name][..., self.output_index], 
+                target[self.target_name]
             )
         elif self.predict_name != self.target_name:
             loss = loss_weight * self.loss_fn(
-                pred[self.predict_name], pred[self.target_name]
+                pred[self.predict_name] if self.output_index is None else pred[self.predict_name][..., self.output_index], 	
+                pred[self.target_name]
             )
         else:
             raise ValueError("Target is None and predict_name is not equal to target_name")
