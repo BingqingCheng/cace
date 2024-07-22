@@ -1,6 +1,6 @@
 # Description: Utility functions for saving and loading datasets
 
-import h5py
+#import h5py
 import numpy as np
 import torch
 
@@ -30,6 +30,7 @@ def numpy_to_tensor(data):
 
 # Function to save the dataset to an HDF5 file
 def save_dataset(data, filename, shuffle=False):
+    import h5py
     if shuffle:
         index = np.random.permutation(len(data)) # Shuffle the data
     else:
@@ -44,6 +45,7 @@ def save_dataset(data, filename, shuffle=False):
     print(f"Saved dataset with {len(data)} records to {filename}")
 
 def load_dataset(filename):
+    import h5py
     all_data = []
     with h5py.File(filename, 'r') as f:
         for key in f.keys():
