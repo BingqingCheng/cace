@@ -59,22 +59,25 @@ class AtomicData(torch_geometric.data.Data):
         self,
         edge_index: torch.Tensor,  # [2, n_edges], always sender -> receiver
         atomic_numbers: torch.Tensor,  # [n_nodes]
-        num_nodes: torch.Tensor, #[,]
         positions: torch.Tensor,  # [n_nodes, 3]
         shifts: torch.Tensor,  # [n_edges, 3],
         unit_shifts: torch.Tensor,  # [n_edges, 3]
-        cell: Optional[torch.Tensor],  # [3,3]
-        forces: Optional[torch.Tensor],  # [n_nodes, 3]
-        molecular_index: Optional[torch.Tensor],  # [n_nodes]
-        energy: Optional[torch.Tensor],  # [, ]
-        stress: Optional[torch.Tensor],  # [1,3,3]
-        virials: Optional[torch.Tensor],  # [1,3,3]
-        additional_info: Optional[Dict], 
+        num_nodes: Optional[torch.Tensor] = None, #[,]
+        cell: Optional[torch.Tensor] = None,  # [3,3]
+        forces: Optional[torch.Tensor] = None,  # [n_nodes, 3]
+        molecular_index: Optional[torch.Tensor] = None,  # [n_nodes]
+        energy: Optional[torch.Tensor] = None,  # [, ]
+        stress: Optional[torch.Tensor] = None,  # [1,3,3]
+        virials: Optional[torch.Tensor] = None,  # [1,3,3]
+        additional_info: Optional[Dict] = None, 
         #dipole: Optional[torch.Tensor],  # [, 3]
         #charges: Optional[torch.Tensor],  # [n_nodes, ]
     ):
         # Check shapes
-        #assert num_nodes == atomic_numbers.shape[0]
+        if num_nodes is None:
+            num_nodes = atomic_numbers.shape[0]
+        else:
+            assert num_nodes == atomic_numbers.shape[0]
         assert edge_index.shape[0] == 2 and len(edge_index.shape) == 2
         assert positions.shape == (num_nodes, 3)
         assert shifts.shape[1] == 3
@@ -89,7 +92,6 @@ class AtomicData(torch_geometric.data.Data):
         #assert charges is None or charges.shape == (num_nodes,)
         # Aggregate data
         data = {
-            "num_nodes": num_nodes,
             "edge_index": edge_index,
             "positions": positions,
             "shifts": shifts,
@@ -105,7 +107,8 @@ class AtomicData(torch_geometric.data.Data):
             #"dipole": dipole,
             #"charges": charges,
         }
-        data.update(additional_info)
+        if additional_info is not None:
+            data.update(additional_info)
         super().__init__(**data)
 
     @classmethod
@@ -203,7 +206,7 @@ class AtomicData(torch_geometric.data.Data):
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
             atomic_numbers=torch.tensor(atomic_numbers, dtype=torch.long),
-            num_nodes=atomic_numbers.shape[0],
+            #num_nodes=atomic_numbers.shape[0],
             forces=forces,
             molecular_index=molecular_index,
             energy=energy,
