@@ -78,11 +78,15 @@ class EvaluateTask(nn.Module):
         if isinstance(data, torch_geometric.batch.Batch):
             data.to(self.device)
             output = self.model(data.to_dict())
+            energies_now = to_numpy(output[self.energy_key])
             if self.atomic_energies is not None:
                 e0_list = self._add_atomic_energies(data)
-                energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
-            else:
-                energies_list.append(to_numpy(output[self.energy_key]))
+                if len(energies_now.shape) > 1:
+                    n_entry = energies_now.shape[1]
+                    e0_list = np.repeat(e0_list, n_entry).reshape(-1, n_entry) 
+                    energies_list.append(energies_now + e0_list)
+                else:
+                    energies_list.append(energies_now)
             if self.forces_key in output:
                 forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
@@ -103,7 +107,7 @@ class EvaluateTask(nn.Module):
             energy = to_numpy(output[self.energy_key])
             if self.atomic_energies is not None:
                 atomic_numbers = data.get_atomic_numbers()
-                energy += sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
+                energy += sum(self.atomic_energies.get(Z, 0) for Z in atomic_numbers)
             energies_list.append(energy)
             if self.forces_key in output:
                 forces_list.append(to_numpy(output[self.forces_key]))
@@ -129,11 +133,15 @@ class EvaluateTask(nn.Module):
             for batch in data_loader:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
+                energies_now = to_numpy(output[self.energy_key])
                 if self.atomic_energies is not None:
                     e0_list = self._add_atomic_energies(batch)
-                    energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
+                    if len(energies_now.shape) > 1:
+                        n_entry = energies_now.shape[1]
+                        e0_list = np.repeat(e0_list, n_entry).reshape(-1, n_entry) 
+                    energies_list.append(energies_now + e0_list)
                 else:
-                    energies_list.append(to_numpy(output[self.energy_key]))
+                    energies_list.append(energies_now)
 
                 if self.forces_key in output:
                     forces_list.append(to_numpy(output[self.forces_key]))
@@ -163,11 +171,15 @@ class EvaluateTask(nn.Module):
             for batch in data:
                 batch.to(self.device)
                 output = self.model(batch.to_dict())
+                energies_now = to_numpy(output[self.energy_key])
                 if self.atomic_energies is not None:
                     e0_list = self._add_atomic_energies(batch)
-                    energies_list.append(to_numpy(output[self.energy_key]) + e0_list)
+                    if len(energies_now.shape) > 1:
+                        n_entry = energies_now.shape[1]
+                        e0_list = np.repeat(e0_list, n_entry).reshape(-1, n_entry) 
+                    energies_list.append(energies_now + e0_list)
                 else:
-                    energies_list.append(to_numpy(output[self.energy_key]))
+                    energies_list.append(energies_now)
 
                 if self.forces_key in output:
                     forces_list.append(to_numpy(output[self.forces_key]))

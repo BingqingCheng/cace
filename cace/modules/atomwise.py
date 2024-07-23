@@ -24,6 +24,7 @@ class Atomwise(nn.Module):
         bias: bool = True,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
+        feature_key: str = 'node_feats',
         output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
         descriptor_output_key: Optional[str] = None,
@@ -78,6 +79,7 @@ class Atomwise(nn.Module):
         self.add_linear_nn = add_linear_nn
         self.post_process = post_process
         self.bias = bias
+        self.feature_key = feature_key
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -107,8 +109,15 @@ class Atomwise(nn.Module):
                 training: bool = None,
                 output_index: int = None, # only used for multi-head output
                ) -> Dict[str, torch.Tensor]:
+
+        # check if self.feature_key exists, otherwise set default 
+        if not hasattr(self, "feature_key") or self.feature_key is None: 
+            self.feature_key = "node_feats"
+        if self.feature_key not in data:
+            raise ValueError(f"Feature key {self.feature_key} not found in data dictionary.")
+
         # reshape the feature vectors
-        features = data['node_feats']
+        features = data[self.feature_key]
         features = features.reshape(features.shape[0], -1)
 
         if self.n_in is None:

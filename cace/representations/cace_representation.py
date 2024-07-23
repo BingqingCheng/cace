@@ -45,6 +45,7 @@ class Cace(nn.Module):
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
+        keep_node_features_A: bool = False,
     ):
         """
         Args:
@@ -70,6 +71,7 @@ class Cace(nn.Module):
         self.max_l = max_l
         self.max_nu = max_nu
         self.mp_norm_factor = 1.0/(avg_num_neighbors)**0.5 # normalization factor for message passing
+        self.keep_node_features_A = keep_node_features_A
 
         # layers
         if node_encoder is None:
@@ -164,6 +166,7 @@ class Cace(nn.Module):
             batch_now = data["batch"]
 
         node_feats_list = []
+        node_feats_A_list = []
 
         # Embeddings
         ## code each node/element in one-hot way
@@ -205,6 +208,8 @@ class Cace(nn.Module):
 
         # mix the different radial components
         node_feat_A = self.radial_transform(node_feat_A)
+        if hasattr(self, "keep_node_features_A") and self.keep_node_features_A:
+            node_feats_A_list.append(node_feat_A)
 
         # symmetrized B basis
         node_feat_B = self.symmetrizer(node_attr=node_feat_A)
@@ -248,10 +253,16 @@ class Cace(nn.Module):
             node_feat_A = node_feat_Ar + node_feat_A_Bchi 
             node_feat_A *= self.mp_norm_factor
             node_feat_A += momeory_now
+            if hasattr(self, "keep_node_features_A") and self.keep_node_features_A:
+                node_feats_A_list.append(node_feat_A)
             node_feat_B = self.symmetrizer(node_attr=node_feat_A)
             node_feats_list.append(node_feat_B)
      
         node_feats_out = torch.stack(node_feats_list, dim=-1)
+        if hasattr(self, "keep_node_features_A") and self.keep_node_features_A:
+            node_feats_A_out = torch.stack(node_feats_A_list, dim=-1)
+        else:
+            node_feats_A_out = None
 
         try:
             displacement = data["displacement"]
@@ -264,5 +275,5 @@ class Cace(nn.Module):
             "displacement": displacement,
             "batch": batch_now,
             "node_feats": node_feats_out,
-            #"node_feats_A": node_feat_A
+            "node_feats_A": node_feats_A_out
         }

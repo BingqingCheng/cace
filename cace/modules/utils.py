@@ -51,24 +51,55 @@ def compute_forces_virials(
     training: bool = False,
     compute_stress: bool = False,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
-    grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
-    gradient, virials = torch.autograd.grad(
-        outputs=[energy],  # [n_graphs, ]
-        inputs=[positions, displacement],  # [n_nodes, 3]
-        grad_outputs=grad_outputs,
-        retain_graph=training,  # Make sure the graph is not destroyed during training
-        create_graph=training,  # Create graph for second derivative
-        allow_unused=True,
-    )
-    stress = torch.zeros_like(displacement)
-    if compute_stress and virials is not None:
-        cell = cell.view(-1, 3, 3)
-        volume = torch.einsum(
-            "zi,zi->z",
-            cell[:, 0, :],
-            torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
-        ).unsqueeze(-1)
-        stress = virials / volume.view(-1, 1, 1)
+    # check the dimension of the energy tensor
+    if len(energy.shape) == 1:
+        grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy)]
+        gradient, virials = torch.autograd.grad(
+            outputs=[energy],  # [n_graphs, ]
+            inputs=[positions, displacement],  # [n_nodes, 3]
+            grad_outputs=grad_outputs,
+            retain_graph=training,  # Make sure the graph is not destroyed during training
+            create_graph=training,  # Create graph for second derivative
+            allow_unused=True,
+        )
+        stress = torch.zeros_like(displacement)
+        if compute_stress and virials is not None:
+            cell = cell.view(-1, 3, 3)
+            volume = torch.einsum(
+                "zi,zi->z",
+                cell[:, 0, :],
+                torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+            ).unsqueeze(-1)
+            stress = virials / volume.view(-1, 1, 1)
+    else:
+        num_energy = energy.shape[1]
+        grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(energy[:,0])]
+        gradient_list, virials_list, stress_list = [], [], []
+        for i in range(num_energy):
+            gradient, virials = torch.autograd.grad(
+                outputs=[energy[:,i]],  # [n_graphs, ]
+                inputs=[positions, displacement],  # [n_nodes, 3]
+                grad_outputs=grad_outputs,
+                retain_graph=(training or (i < num_energy - 1)),  # Make sure the graph is not destroyed during training
+                create_graph=(training or (i < num_energy - 1)),  # Create graph for second derivative
+                allow_unused=True,
+                )
+            stress = torch.zeros_like(displacement)
+            if compute_stress and virials is not None:
+                cell = cell.view(-1, 3, 3)
+                volume = torch.einsum(
+                    "zi,zi->z",
+                    cell[:, 0, :],
+                    torch.cross(cell[:, 1, :], cell[:, 2, :], dim=1),
+                ).unsqueeze(-1)
+                stress = virials / volume.view(-1, 1, 1)
+            gradient_list.append(gradient)
+            virials_list.append(virials)
+            stress_list.append(stress)
+        gradient = torch.stack(gradient_list, axis=2)
+        virials = torch.stack(virials_list, axis=-1)
+        stress = torch.stack(stress_list, axis=-1)
+
     if gradient is None:
         gradient = torch.zeros_like(positions)
     if virials is None:

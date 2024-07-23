@@ -206,7 +206,7 @@ class AtomicData(torch_geometric.data.Data):
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
             atomic_numbers=torch.tensor(atomic_numbers, dtype=torch.long),
-            #num_nodes=atomic_numbers.shape[0],
+            num_nodes=atomic_numbers.shape[0],
             forces=forces,
             molecular_index=molecular_index,
             energy=energy,

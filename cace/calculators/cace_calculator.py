@@ -37,6 +37,7 @@ class CACECalculator(Calculator):
         forces_key: str = 'forces',
         stress_key: str = 'stress',
         atomic_energies: dict = None,
+        output_index: int = None, # only used for multi-output models
         **kwargs,
         ):
 
@@ -69,6 +70,8 @@ class CACECalculator(Calculator):
         self.energy_key = energy_key 
         self.forces_key = forces_key
         self.stress_key = stress_key
+
+        self.output_index = output_index
         
         for param in self.model.parameters():
             param.requires_grad = False
@@ -84,6 +87,9 @@ class CACECalculator(Calculator):
         # call to base-class to set atoms attribute
         Calculator.calculate(self, atoms)
 
+        if not hasattr(self, "output_index"):
+            self.output_index = None
+
         # prepare data
         data_loader = torch_geometric.dataloader.DataLoader(
             dataset=[
@@ -98,15 +104,16 @@ class CACECalculator(Calculator):
 
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
-        output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress)
-        #print(output)
+        output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress, output_index=self.output_index)
+        energy_output = to_numpy(output[self.energy_key])
+        forces_output = to_numpy(output[self.forces_key])
         # subtract atomic energies if available
         if self.atomic_energies:
             e0 = sum(self.atomic_energies.get(Z, 0) for Z in atoms.get_atomic_numbers())
         else:
             e0 = 0.0
-        self.results["energy"] = (to_numpy(output[self.energy_key]) + e0) * self.energy_units_to_eV
-        self.results["forces"] = to_numpy(output[self.forces_key]) * self.energy_units_to_eV / self.length_units_to_A
+        self.results["energy"] = (energy_output + e0) * self.energy_units_to_eV
+        self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
         if self.compute_stress and output[self.stress_key] is not None:
             stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:

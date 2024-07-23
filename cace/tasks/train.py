@@ -2,6 +2,7 @@ from typing import Optional, Dict, List, Type, Any
 import logging
 import torch
 from torch import nn
+import numpy as np
 from .loss import GetLoss
 from ..tools import Metrics
 from ..tools import to_numpy, tensor_dict_to_device
@@ -178,6 +179,7 @@ class TrainingTask(nn.Module):
             checkpoint_stride: int = 10,            
             bestmodel_path: Optional[str] = 'best_model.pth',
             print_stride: int = 1,
+            subset_ratio: float = 1.0,
            ):
 
         best_val_loss = float('inf')
@@ -198,6 +200,8 @@ class TrainingTask(nn.Module):
 
             # train
             total_loss = 0
+            if subset_ratio < 1.0:
+                train_loader = self._get_subset_batches(train_loader, subset_ratio)
             for batch in train_loader:
                 loss = self.train_step(batch, screen_nan=screen_nan)
                 total_loss += loss
@@ -240,6 +244,14 @@ class TrainingTask(nn.Module):
                 self.checkpoint(checkpoint_path)
 
             self.global_step += 1 
+
+    # Function to subsample batches
+    def _get_subset_batches(self, dataloader, subset_ratio: float):
+        batches = list(dataloader)
+        subset_size = int(subset_ratio * len(dataloader))
+        if subset_size == 0: subset_size = 1
+        indices = np.random.choice(len(batches), subset_size, replace=False)
+        return [batches[i] for i in indices]
 
     def save_model(self, path: str, device: torch.device = torch.device('cpu')):
         if self.ema and self.global_step >= self.ema_start: 
