@@ -193,7 +193,7 @@ class AtomicData(torch_geometric.data.Data):
                 if more_info is None:
                     more_info = atoms.arrays.get(data_key[kk], None)
                 more_info = (
-                    torch.tensor(more_info, dtype=torch.get_default_dtype()).unsqueeze(0)
+                    torch.tensor(more_info, dtype=torch.get_default_dtype())
                     if more_info is not None
                     else None
                 )
