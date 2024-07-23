@@ -67,7 +67,7 @@ class Metrics(nn.Module):
                ):
         pred_tensor = pred[self.predict_name].clone().detach()
         if self.output_index is not None:
-            pred_tensor = pred_tensor[:, self.output_index]
+            pred_tensor = pred_tensor[..., self.output_index]
         if target is not None:
             target_tensor = target[self.target_name].clone().detach()
         elif self.predict_name != self.target_name:
