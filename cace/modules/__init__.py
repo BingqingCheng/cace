@@ -22,6 +22,8 @@ from .blocks import *
 
 from .atomwise import *
 
+from .ewald import *
+
 from .forces import *
 
 from .interaction import *
