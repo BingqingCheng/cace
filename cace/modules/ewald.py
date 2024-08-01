@@ -52,7 +52,7 @@ class EwaldPotential(nn.Module):
             # Take the real part of the potential
             results.append(pot)
 
-        data[self.output_key] = torch.stack(results)
+        data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
         return data
 
     def compute_potential(self, r_raw, q, box):
