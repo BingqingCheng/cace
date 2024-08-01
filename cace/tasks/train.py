@@ -91,13 +91,20 @@ class TrainingTask(nn.Module):
     def update_loss(self, losses: List[GetLoss]):
         self.losses = nn.ModuleList(losses)
 
+    def update_metrics(self, metrics: List[Metrics]):
+        self.metrics = nn.ModuleList(metrics)
+
     def forward(self, data, training: bool):
         return self.model(data, training=training)
 
-    def loss_fn(self, pred, batch, loss_args: Optional[Dict[str, torch.Tensor]] = None):
+    def loss_fn(self, pred, batch, loss_args: Optional[Dict[str, torch.Tensor]] = None, index: Optional[List[int]] = None):
         loss = 0.0
-        for eachloss in self.losses:
-            loss += eachloss(pred, batch, loss_args)
+        if index is not None:
+            for i in index:
+                loss += self.losses[i](pred, batch, loss_args)
+        else:
+            for eachloss in self.losses:
+                loss += eachloss(pred, batch, loss_args)
         return loss
 
     def log_metrics(self, subset, pred, batch):
@@ -108,7 +115,12 @@ class TrainingTask(nn.Module):
         for metric in self.metrics:
             metric.retrieve_metrics(subset, print_log=print_log)
 
-    def train_step(self, batch, screen_nan: bool = True):
+    def train_step(self, 
+                   batch, 
+                   screen_nan: bool = True, 
+                   output_index: Optional[int] = None, # output index for multi-output models
+                   loss_index: Optional[List[int]] = None # loss index for multi-loss models
+                   ):
         torch.set_grad_enabled(True)
 
         batch.to(self.device)
@@ -116,10 +128,10 @@ class TrainingTask(nn.Module):
 
         self.train()
         self.optimizer.zero_grad()
-        pred = self.model(batch_dict, training=True)
+        pred = self.model(batch_dict, training=True, output_index=output_index)
         self.log_metrics('train', pred, batch_dict)
 
-        loss = self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': True})
+        loss = self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': True}, loss_index)
         loss.backward()
 
         # Print gradients for debugging purposes
@@ -150,7 +162,7 @@ class TrainingTask(nn.Module):
 
         return to_numpy(loss).item()
 
-    def validate(self, val_loader):
+    def validate(self, val_loader, output_index: Optional[int] = None):
         torch.set_grad_enabled(self.grad_enabled)
         
         self.eval()
@@ -159,9 +171,9 @@ class TrainingTask(nn.Module):
             batch.to(self.device)
             batch_dict = batch.to_dict()
             if self.ema and self.global_step >= self.ema_start:
-                pred = self.ema_model(batch_dict, training=False)
+                pred = self.ema_model(batch_dict, training=False, output_index=output_index)
             else:
-                pred = self.model(batch_dict, training=False)
+                pred = self.model(batch_dict, training=False, output_index=output_index)
 
             loss = to_numpy(self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': False}))
             total_loss += loss.item()
@@ -180,6 +192,8 @@ class TrainingTask(nn.Module):
             bestmodel_path: Optional[str] = 'best_model.pth',
             print_stride: int = 1,
             subset_ratio: float = 1.0,
+            output_index: Optional[int] = None, # output index for multi-output models
+            subsample_loss_mode: Optional[int] = None,
            ):
 
         best_val_loss = float('inf')
@@ -203,7 +217,11 @@ class TrainingTask(nn.Module):
             if subset_ratio < 1.0:
                 train_loader = self._get_subset_batches(train_loader, subset_ratio)
             for batch in train_loader:
-                loss = self.train_step(batch, screen_nan=screen_nan)
+                if subsample_loss_mode is not None:
+                    loss_index = np.random.choice(len(self.losses), subsample_loss_mode)
+                    loss = self.train_step(batch, screen_nan=screen_nan, loss_index=loss_index, output_index=output_index)
+                else:
+                    loss = self.train_step(batch, screen_nan=screen_nan, loss_index=None, output_index=output_index)
                 total_loss += loss
             avg_loss = total_loss / len(train_loader)
 
@@ -216,7 +234,7 @@ class TrainingTask(nn.Module):
             else:
                 screen_output = False
             if epoch % val_stride == 0:
-                val_loss = self.validate(val_loader)
+                val_loss = self.validate(val_loader, output_index=output_index)
                 for pg in self.optimizer.param_groups:
                     lr_now = pg["lr"]
                     if screen_output:
@@ -236,7 +254,7 @@ class TrainingTask(nn.Module):
                 else:
                     self.scheduler.step()
 
-            if val_loss < best_val_loss:
+            if epoch > val_stride and val_loss < best_val_loss:
                 best_val_loss = val_loss
                 self.save_model(bestmodel_path, device=self.device)
 
