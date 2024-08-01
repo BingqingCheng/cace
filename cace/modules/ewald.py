@@ -22,6 +22,7 @@ class EwaldPotential(nn.Module):
         self.feature_key = feature_key
         self.output_key = output_key
         self.aggregation_mode = aggregation_mode
+        self.model_outputs = [output_key]
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
