@@ -5,9 +5,9 @@ from typing import Dict
 
 class EwaldPotential(nn.Module):
     def __init__(self,
-                 dl=4.0,  # grid resolution
+                 dl=2.0,  # grid resolution
                  sigma=2.0,  # width of the Gaussian on each atom
-                 remove_self_interaction=False,
+                 remove_self_interaction=True,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
                  aggregation_mode: str = "sum"):
@@ -17,12 +17,13 @@ class EwaldPotential(nn.Module):
         self.sigma_sq_half = sigma ** 2 / 2.0
         self.twopi = 2.0 * torch.pi
         self.twopi_sq = self.twopi ** 2
-        self.k_sq_max = (self.twopi / self.dl) ** 2
         self.remove_self_interaction = remove_self_interaction
         self.feature_key = feature_key
         self.output_key = output_key
         self.aggregation_mode = aggregation_mode
         self.model_outputs = [output_key]
+        self.norm_factor = 1.0
+        self.k_sq_max = (self.twopi / self.dl) ** 2
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
@@ -65,6 +66,8 @@ class EwaldPotential(nn.Module):
 
         # Calculate nk based on the provided box dimensions and resolution
         nk = (box / self.dl).int().tolist()
+        for i in range(3):
+            if nk[i] < 1: nk[i] = 1
         n = r.shape[0]
         eikx = torch.zeros((n, nk[0] + 1), dtype=dtype, device=device)
         eiky = torch.zeros((n, 2 * nk[1] + 1), dtype=dtype, device=device)
@@ -74,18 +77,14 @@ class EwaldPotential(nn.Module):
         eiky[:, nk[1]] = torch.ones(n, dtype=dtype, device=device)
         eikz[:, nk[2]] = torch.ones(n, dtype=dtype, device=device)
 
-        eikx[:, 1] = torch.exp(1j * self.twopi * r[:, 0])
-        eiky[:, nk[1] + 1] = torch.exp(1j * self.twopi * r[:, 1])
-        eikz[:, nk[2] + 1] = torch.exp(1j * self.twopi * r[:, 2])
-
         # Calculate remaining positive kx, ky, and kz terms by recursion
-        for k in range(2, nk[0] + 1):
-            eikx[:, k] = eikx[:, k - 1].clone() * eikx[:, 1].clone()
-        for k in range(2, nk[1] + 1):
-            eiky[:, nk[1] + k] = eiky[:, nk[1] + k - 1].clone() * eiky[:, nk[1] + 1].clone()
-        for k in range(2, nk[2] + 1):
-            eikz[:, nk[2] + k] = eikz[:, nk[2] + k - 1].clone() * eikz[:, nk[2] + 1].clone()
-        
+        for k in range(1, nk[0] + 1):
+            eikx[:, k] = torch.exp(1j * self.twopi * k * r[:, 0]) 
+        for k in range(1, nk[1] + 1):
+            eiky[:, nk[1] + k] = torch.exp(1j * self.twopi * k * r[:, 1])
+        for k in range(1, nk[2] + 1):
+            eikz[:, nk[2] + k] = torch.exp(1j * self.twopi * k * r[:, 2])
+
         # Negative k values are complex conjugates of positive ones
         for k in range(nk[1]):
             eiky[:, k] = torch.conj(eiky[:, 2 * nk[1] - k])
@@ -98,7 +97,7 @@ class EwaldPotential(nn.Module):
             factor = 1.0 if kx == 0 else 2.0
 
             for ky, kz in product(range(-nk[1], nk[1] + 1), range(-nk[2], nk[2] + 1)):
-                k_sq = self.twopi * ((kx / box[0]) ** 2 + (ky / box[1]) ** 2 + (kz / box[2]) ** 2)
+                k_sq = self.twopi_sq * ((kx / box[0]) ** 2 + (ky / box[1]) ** 2 + (kz / box[2]) ** 2)
                 if k_sq <= self.k_sq_max and k_sq > 0:  # remove the k=0 term
                     kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
                     term = torch.sum(q * (eikx[:, kx].unsqueeze(1) * eiky[:, nk[1] + ky].unsqueeze(1) * eikz[:, nk[2] + kz].unsqueeze(1)), dim=0)
@@ -106,7 +105,7 @@ class EwaldPotential(nn.Module):
 
         pot = torch.stack(pot_list).sum(axis=0) / (box[0] * box[1] * box[2])
         if self.remove_self_interaction:
-            pot -= torch.sum(q ** 2) / (self.sigma * self.twopi * torch.sqrt(self.twopi))
+            pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
-        return pot.real
+        return pot.real * self.norm_factor
 
