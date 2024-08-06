@@ -6,8 +6,8 @@ from typing import Dict
 class EwaldPotential(nn.Module):
     def __init__(self,
                  dl=2.0,  # grid resolution
-                 sigma=2.0,  # width of the Gaussian on each atom
-                 remove_self_interaction=True,
+                 sigma=1.0,  # width of the Gaussian on each atom
+                 remove_self_interaction=False,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
                  aggregation_mode: str = "sum"):
