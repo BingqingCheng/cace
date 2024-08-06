@@ -46,11 +46,13 @@ def init_device(device_str: str) -> torch.device:
 
     if "cuda" in device_str: # can be cuda:1 etc.
         assert torch.cuda.is_available(), "No CUDA device available!"
+        torch.cuda.init()
+        device = torch.device(device_str)
+        torch.cuda.set_device(device)
         logging.info(
             f"CUDA version: {torch.version.cuda}, CUDA device: {torch.cuda.current_device()}"
         )
-        torch.cuda.init()
-        return torch.device(device_str)
+        return device
         
     # if device_str == "cuda":
     #     assert torch.cuda.is_available(), "No CUDA device available!"
