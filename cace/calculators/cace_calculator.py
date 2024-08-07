@@ -62,7 +62,10 @@ class CACECalculator(Calculator):
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
 
-        self.cutoff = self.model.representation.cutoff
+        try:
+            self.cutoff = self.model.representation.cutoff
+        except AttributeError:
+            self.cutoff = self.model.models[0].representation.cutoff
 
         self.atomic_energies = atomic_energies
 
