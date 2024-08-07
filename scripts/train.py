@@ -110,7 +110,10 @@ def main():
     task.save_model(args.prefix+'_phase_1.pth')
 
     # Phase 2 Training Adjustment
-    energy_loss_2 = GetLoss('energy', 'CACE_energy', torch.nn.MSELoss(), args.second_phase_energy_loss_weight)
+    energy_loss_2 = GetLoss(target_name= 'energy', 
+                            predict_name = 'CACE_energy', 
+                            loss_fn = torch.nn.MSELoss(), 
+                            loss_weight = args.second_phase_energy_loss_weight)
     task.update_loss([energy_loss_2, force_loss])
 
     # Fit Training Task for Phase 2
