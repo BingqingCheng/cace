@@ -88,6 +88,8 @@ class TrainingTask(nn.Module):
 
         self.grad_enabled = len(self.model.required_derivatives) > 0
 
+        print("Number of model_parameters: ", sum(p.numel() for p in self.model.parameters()))
+
     def update_loss(self, losses: List[GetLoss]):
         self.losses = nn.ModuleList(losses)
 
