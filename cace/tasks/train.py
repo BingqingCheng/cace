@@ -115,7 +115,9 @@ class TrainingTask(nn.Module):
 
     def retrieve_metrics(self, subset, print_log: bool = False):
         for metric in self.metrics:
-            metric.retrieve_metrics(subset, print_log=print_log)
+            metric_now = metric.retrieve_metrics(subset, print_log=print_log)
+
+            print(metric_now)
 
     def train_step(self, 
                    batch, 
