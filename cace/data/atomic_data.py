@@ -203,6 +203,9 @@ class AtomicData(torch_geometric.data.Data):
                 )
             additional_info[key] = more_info
 
+        # print(additional_info)
+
+
         return cls(
             edge_index=torch.tensor(edge_index, dtype=torch.long),
             positions=torch.tensor(positions, dtype=torch.get_default_dtype()),

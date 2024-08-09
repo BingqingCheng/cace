@@ -65,6 +65,10 @@ class Metrics(nn.Module):
                 pred: Dict[str, torch.Tensor],
                 target: Optional[Dict[str, torch.Tensor]] = None,
                ):
+        
+        print(pred.keys())
+        print(self.predict_name, self.target_name)
+
         pred_tensor = pred[self.predict_name].clone().detach()
         if self.output_index is not None:
             pred_tensor = pred_tensor[..., self.output_index]

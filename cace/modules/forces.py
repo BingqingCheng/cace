@@ -49,9 +49,25 @@ class Forces(nn.Module):
             self.required_derivatives.append('positions')
 
     def forward(self, data: Dict[str, torch.Tensor], training: bool = False, output_index: int = None) -> Dict[str, torch.Tensor]:
+        
+        displacement=data.get('displacement', None)
+
+        # print("Data_keys: ", data.keys())
+        # print(data)
+
+        # print("Displacement: ", displacement)
+
+        # get_symmetric_displacement(positions = data['positions'],
+        #                            unit_shifts = data['unit_shifts'],
+        #                             cell: Optional[torch.Tensor],
+        #                             edge_index: torch.Tensor,
+        #                             num_graphs: int,
+        #                             batch: torch.Tensor,
+        #                         )
+        
         forces, virials, stress = get_outputs(
             energy=data[self.energy_key][:, output_index] if output_index is not None and len(data[self.energy_key].shape) == 2 else data[self.energy_key],
-            positions=data['positions'],
+            positions = data['positions'],
             displacement=data.get('displacement', None),
             cell=data.get('cell', None),
             training=training,
@@ -59,6 +75,8 @@ class Forces(nn.Module):
             #compute_virials=self.calc_virials,
             compute_stress=self.calc_stress
             )
+        
+        # print("computed stress from CACE: ", stress)
 
         data[self.forces_key] = forces
         if self.virial_key is not None:

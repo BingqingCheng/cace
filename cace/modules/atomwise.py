@@ -122,6 +122,7 @@ class Atomwise(nn.Module):
 
         if self.n_in is None:
             self.n_in = features.shape[1]
+            print(f"Setting n_in (the input feature_dim of read_out layers) to {self.n_in} based on input data.")
         else:
             assert self.n_in == features.shape[1]
 

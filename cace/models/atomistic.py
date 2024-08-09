@@ -136,10 +136,15 @@ class NeuralNetworkPotential(AtomisticModel):
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
 
+        # print("Data_keys in NNP: ", data.keys())
+
         if 'stress' in self.model_outputs or 'CACE_stress' in self.model_outputs:
             compute_stress = True
         for m in self.input_modules:
             data = m(data, compute_stress=compute_stress, compute_virials=compute_virials)
+
+
+        # print("If stress is computed: ", compute_stress)
 
         data = self.representation(data)
 

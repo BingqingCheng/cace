@@ -19,6 +19,7 @@ from ..modules import (
     )
 from ..modules import (
     get_edge_vectors_and_lengths,
+    get_symmetric_displacement
     ) 
 
 __all__ = ["Cace"]
@@ -263,6 +264,7 @@ class Cace(nn.Module):
             node_feats_A_out = torch.stack(node_feats_A_list, dim=-1)
         else:
             node_feats_A_out = None
+
 
         try:
             displacement = data["displacement"]

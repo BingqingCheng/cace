@@ -116,8 +116,7 @@ class TrainingTask(nn.Module):
     def retrieve_metrics(self, subset, print_log: bool = False):
         for metric in self.metrics:
             metric_now = metric.retrieve_metrics(subset, print_log=print_log)
-
-            print(metric_now)
+            # print(metric_now)
 
     def train_step(self, 
                    batch, 
@@ -130,9 +129,11 @@ class TrainingTask(nn.Module):
         batch.to(self.device)
         batch_dict = batch.to_dict()
 
+
         self.train()
         self.optimizer.zero_grad()
         pred = self.model(batch_dict, training=True, output_index=output_index)
+                
         self.log_metrics('train', pred, batch_dict)
 
         loss = self.loss_fn(pred, batch_dict, {'epochs': self.global_step, 'training': True}, loss_index)
@@ -220,7 +221,7 @@ class TrainingTask(nn.Module):
             total_loss = 0
             if subset_ratio < 1.0:
                 train_loader = self._get_subset_batches(train_loader, subset_ratio)
-            for batch in train_loader:
+            for batch in train_loader:                
                 if subsample_loss_mode is not None:
                     loss_index = np.random.choice(len(self.losses), subsample_loss_mode)
                     loss = self.train_step(batch, screen_nan=screen_nan, loss_index=loss_index, output_index=output_index)
@@ -228,6 +229,10 @@ class TrainingTask(nn.Module):
                     loss = self.train_step(batch, screen_nan=screen_nan, loss_index=None, output_index=output_index)
                 total_loss += loss
             avg_loss = total_loss / len(train_loader)
+
+            if epoch == 1:
+                model_size = sum(p.numel() for p in self.model.parameters())
+                print("The model with {} parameters are being trained. ".format(model_size))
 
             if self.swa and self.global_step >= self.swa_start:
                self.swa_model.update_parameters(self.model)
