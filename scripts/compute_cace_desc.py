@@ -1,6 +1,4 @@
-#import sys
-#sys.path.append('../')
-
+import sys
 import os
 from tqdm import tqdm
 import numpy as np
@@ -46,7 +44,7 @@ for sampled_data in tqdm(data_loader):
         src=cace_result_more['node_feats'], 
         index=sampled_data["batch"], 
         dim=0
-        )
+        ) / torch.bincount(sampled_data['batch'])
     n_configs = avg_B.shape[0]
     avg_B_flat = to_numpy(avg_B.reshape(n_configs, -1))
     for i in range(n_configs):
