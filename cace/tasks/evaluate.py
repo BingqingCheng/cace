@@ -48,7 +48,10 @@ class EvaluateTask(nn.Module):
         self.model.to(device)
 
         self.device = torch_tools.init_device(device)
-        self.cutoff = self.model.representation.cutoff
+        try:
+            self.cutoff = self.model.representation.cutoff
+        except AttributeError:
+            self.cutoff = self.model.models[0].representation.cutoff
         self.energy_key = energy_key
         self.forces_key = forces_key
         self.stress_key = stress_key
