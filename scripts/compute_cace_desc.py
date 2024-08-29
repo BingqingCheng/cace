@@ -44,9 +44,12 @@ for sampled_data in tqdm(data_loader):
         src=cace_result_more['node_feats'], 
         index=sampled_data["batch"], 
         dim=0
-        ) / torch.bincount(sampled_data['batch'])
+        )
+    #print(avg_B.shape)
+    #print(torch.bincount(sampled_data['batch']))
     n_configs = avg_B.shape[0]
-    avg_B_flat = to_numpy(avg_B.reshape(n_configs, -1))
+    avg_B_flat = to_numpy(avg_B.reshape(n_configs, -1) / torch.bincount(sampled_data['batch']).reshape(-1, 1))
+    #print(avg_B_flat.shape)
     for i in range(n_configs):
         data[i+n_frame].info['CACE_desc'] = avg_B_flat[i]
     n_frame += n_configs
