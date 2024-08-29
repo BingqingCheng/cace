@@ -24,7 +24,7 @@ class Atomwise(nn.Module):
         bias: bool = True,
         activation: Callable = F.silu,
         aggregation_mode: str = "sum",
-        feature_key: str = 'node_feats',
+        feature_key: Union[str, Sequence[int]] = 'node_feats',
         output_key: str = "energy",
         per_atom_output_key: Optional[str] = None,
         descriptor_output_key: Optional[str] = None,
@@ -113,12 +113,15 @@ class Atomwise(nn.Module):
         # check if self.feature_key exists, otherwise set default 
         if not hasattr(self, "feature_key") or self.feature_key is None: 
             self.feature_key = "node_feats"
-        if self.feature_key not in data:
-            raise ValueError(f"Feature key {self.feature_key} not found in data dictionary.")
 
         # reshape the feature vectors
-        features = data[self.feature_key]
-        features = features.reshape(features.shape[0], -1)
+        if isinstance(self.feature_key, str):
+            if self.feature_key not in data:
+                raise ValueError(f"Feature key {self.feature_key} not found in data dictionary.")
+            features = data[self.feature_key]
+            features = features.reshape(features.shape[0], -1)
+        elif isinstance(self.feature_key, list):
+            features = torch.cat([data[key].reshape(data[key].shape[0], -1) for key in self.feature_key], dim=-1)
 
         if self.n_in is None:
             self.n_in = features.shape[1]

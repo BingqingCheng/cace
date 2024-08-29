@@ -20,10 +20,12 @@ class CombinePotential(nn.Module):
                        e.g. [pot1, pot2] where
         pot1 = {'CACE_energy': 'CACE_energy_intra',
         'CACE_forces': 'CACE_forces_intra',
+        'weight': 1.
         }
 
         pot2 = {'CACE_energy': 'CACE_energy_inter',
         'CACE_forces': 'CACE_forces_inter',
+        'weight': 0.01,
         }
         out_keys: List of keys to output. Should be present in all potential_keys.
         operation: Operation to combine the outputs of the potentials.
@@ -67,7 +69,12 @@ class CombinePotential(nn.Module):
             output.update(result)
 
         for key in self.out_keys:
-            values = [ results[i][potential_key[key]] for i, potential_key in enumerate(self.potential_keys)]
+            values = []
+            for i, potential_key in enumerate(self.potential_keys):
+                v_now = results[i][potential_key[key]]
+                if 'weight' in potential_key:
+                    v_now *= potential_key['weight']
+                values.append(v_now)
             if values:
                 output[key] = self.operation(values)
         return output

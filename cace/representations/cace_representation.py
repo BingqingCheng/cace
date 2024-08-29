@@ -46,6 +46,7 @@ class Cace(nn.Module):
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
         keep_node_features_A: bool = False,
+        forward_features: List[str] = [],
     ):
         """
         Args:
@@ -72,6 +73,7 @@ class Cace(nn.Module):
         self.max_nu = max_nu
         self.mp_norm_factor = 1.0/(avg_num_neighbors)**0.5 # normalization factor for message passing
         self.keep_node_features_A = keep_node_features_A
+        self.forward_features = forward_features
 
         # layers
         if node_encoder is None:
@@ -269,11 +271,18 @@ class Cace(nn.Module):
         except:
             displacement = None
 
-        return {
+        output = {
             "positions": data["positions"],
             "cell": data["cell"],
             "displacement": displacement,
             "batch": batch_now,
             "node_feats": node_feats_out,
-            "node_feats_A": node_feats_A_out
-        }
+            "node_feats_A": node_feats_A_out,
+            }
+
+        if hasattr(self, "forward_features") and len(self.forward_features) > 0:
+            for key in self.forward_features:
+                if key in data:
+                    output[key] = data[key]
+ 
+        return output
