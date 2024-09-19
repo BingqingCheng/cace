@@ -9,7 +9,6 @@ class CombinePotential(nn.Module):
         self,
         potentials: List[nn.Module],
         potential_keys: List[Dict],
-        out_keys: List = ['CACE_energy', 'CACE_forces', 'CACE_stress'],
         operation = None,
     ):
         """
@@ -40,7 +39,7 @@ class CombinePotential(nn.Module):
                     self.required_derivatives.append(d)
 
         self.out_keys = []
-        for key in out_keys:
+        for key in potential_keys[0]:
             if all(key in potential_key for potential_key in self.potential_keys):
                 self.out_keys.append(key)
 

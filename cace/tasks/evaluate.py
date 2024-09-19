@@ -33,6 +33,7 @@ class EvaluateTask(nn.Module):
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
+        q_key: str = 'q',
         atomic_energies: dict = None,
         ):
 
@@ -55,6 +56,7 @@ class EvaluateTask(nn.Module):
         self.energy_key = energy_key
         self.forces_key = forces_key
         self.stress_key = stress_key
+        self.q_key = q_key
 
         self.atomic_energies = atomic_energies
         
@@ -64,7 +66,7 @@ class EvaluateTask(nn.Module):
         for param in self.model.parameters():
             param.requires_grad = False
 
-    def forward(self, data=None, batch_size=1, compute_stress=False, xyz_output=None):
+    def forward(self, data=None, batch_size=1, compute_stress=False, keep_q=False, xyz_output=None):
         """
         Calculate properties.
         args:
@@ -76,6 +78,7 @@ class EvaluateTask(nn.Module):
         energies_list = []
         stresses_list = []
         forces_list = []
+        q_list = []
 
         # check the data type
         if isinstance(data, torch_geometric.batch.Batch):
@@ -94,6 +97,8 @@ class EvaluateTask(nn.Module):
                 forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
+            if keep_q and self.q_key in output:
+                q_list.append(to_numpy(output[self.q_key]))
 
         elif isinstance(data, Atoms):
             data_loader = torch_geometric.dataloader.DataLoader(
@@ -116,6 +121,8 @@ class EvaluateTask(nn.Module):
                 forces_list.append(to_numpy(output[self.forces_key]))
             if compute_stress and self.stress_key in output:
                 stresses_list.append(to_numpy(output[self.stress_key]))
+            if keep_q and self.q_key in output:
+                q_list.append(to_numpy(output[self.q_key]))
 
         # check if the data is a list of atoms
         elif isinstance(data, list):
@@ -142,9 +149,8 @@ class EvaluateTask(nn.Module):
                     if len(energies_now.shape) > 1:
                         n_entry = energies_now.shape[1]
                         e0_list = np.repeat(e0_list, n_entry).reshape(-1, n_entry) 
-                    energies_list.append(energies_now + e0_list)
-                else:
-                    energies_list.append(energies_now)
+                    energies_now += e0_list
+                energies_list.append(energies_now)
 
                 if self.forces_key in output:
                     forces_list.append(to_numpy(output[self.forces_key]))
@@ -156,15 +162,17 @@ class EvaluateTask(nn.Module):
                     atomforces_list.append(forces[:-1])
                 if compute_stress and self.stress_key in output:
                     stresses_list.append(to_numpy(output[self.stress_key]))
+                if keep_q and self.q_key in output:
+                    q_list.append(to_numpy(output[self.q_key]))
 
             # Store data in atoms objects
-            # TODO: doesn't work
             if xyz_output is not None and batch_size == 1:
                 for i, (atoms, energy, forces) in enumerate(zip(data, energies_list, atomforces_list)):
                     atoms.calc = None  # crucial
-                    atoms.info[self.energy_key] = energy
-                    atoms.arrays[self.forces_key] = forces
-    
+                    atoms.info[self.energy_key] = energy[0] * self.energy_units_to_eV
+                    atoms.set_array(self.forces_key, forces[0] * self.energy_units_to_eV / self.length_units_to_A)
+                    if keep_q:    
+                        atoms.set_array(self.q_key, q_list[i])
                     if compute_stress:
                         atoms.info[self.stress_key] = stresses_list[i]
                     # Write atoms to output path
@@ -188,6 +196,8 @@ class EvaluateTask(nn.Module):
                     forces_list.append(to_numpy(output[self.forces_key]))
                 if compute_stress and self.stress_key in output:
                     stresses_list.append(to_numpy(output[self.stress_key]))
+                if keep_q and self.q_key in output:
+                    q_list.append(to_numpy(output[self.q_key]))
         else:
             raise ValueError("Input data type not recognized")
 
@@ -195,6 +205,7 @@ class EvaluateTask(nn.Module):
             "energy": np.concatenate(energies_list) * self.energy_units_to_eV,
             "forces": None if len(forces_list) == 0 else np.vstack(forces_list) * self.energy_units_to_eV / self.length_units_to_A,
             "stress": None if len(stresses_list) == 0 else np.concatenate(stresses_list) * self.energy_units_to_eV / self.length_units_to_A ** 3,
+            "q": None if len(q_list) == 0 else np.concatenate(q_list),
 	}
         return results
 
