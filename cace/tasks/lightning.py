@@ -2,9 +2,40 @@ import os
 import torch
 import torch.nn as nn
 import lightning as L
+from . import GetLoss
+from ..tools import Metrics
 from typing import Dict, Optional, List, Tuple
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
+
+def default_losses(e_weight=0.1,f_weight=1000):
+    e_loss = GetLoss(
+                target_name='energy',
+                predict_name='pred_energy',
+                loss_fn=torch.nn.MSELoss(),
+                loss_weight=e_weight,
+                )
+    f_loss = GetLoss(
+                target_name='forces',
+                predict_name='pred_forces',
+                loss_fn=torch.nn.MSELoss(),
+                loss_weight=f_weight,
+            )
+    return [e_loss,f_loss]
+
+def default_metrics():
+    e_metric = Metrics(
+                target_name='energy',
+                predict_name='pred_energy',
+                name='e_metric',
+                per_atom=True,
+            )
+    f_metric = Metrics(
+                target_name='forces',
+                predict_name='pred_forces',
+                name='f_metric',
+            )
+    return [e_metric,f_metric]
 
 #Lightning class for wrapping around nn.Modules
 class LightningModel(L.LightningModule):
@@ -20,7 +51,6 @@ class LightningModel(L.LightningModule):
                  pass_epoch_to_loss = False,
                 ):
         super().__init__()
-        from deeporb.util import default_losses, default_metrics
         if losses is None:
             losses = default_losses()
         if metrics is None:
