@@ -156,8 +156,9 @@ class LightningTrainingTask():
                                     default_f_name = default_f_name,
         )
 
-    def fit(self,data,chkpt=None,dev_run=False,max_epochs=100,max_steps=None,gradient_clip_val=10):
-        #max_steps overrides max_epochs
+    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10):
+        if (max_steps is None) and (max_epochs is None):
+            print("Neither max_steps or max_epochs is set, defaulting to max_epochs=1000...")
         if chkpt is not None:
             self.load(chkpt)
         trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,max_steps=max_steps,gradient_clip_val=gradient_clip_val)
