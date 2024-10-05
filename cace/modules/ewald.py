@@ -9,7 +9,7 @@ class EwaldPotential(nn.Module):
                  sigma=1.0,  # width of the Gaussian on each atom
                  exponent=1, # default is for electrostattics with p=1, we can do London dispersion with p=6
                  external_field = None, # external field
-                 external_field_direction: str = 'x', # external field direction
+                 external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z
                  remove_self_interaction=True,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
@@ -31,10 +31,10 @@ class EwaldPotential(nn.Module):
         #self.norm_factor = 90.0474
         self.norm_factor = 1.0 
         # when using a norm_factor = 1, all "charges" are scaled by sqrt(90.0474)
-        # the external field is then scaled by sqrt(90.0474)
-        # self.external_field_norm_factor = 1.0 / torch.sqrt(90.0474) = 1/9.48933 
+        # the external field is then scaled by sqrt(90.0474) = 9.48933
         self.k_sq_max = (self.twopi / self.dl) ** 2
         self.external_field = external_field
+        self.external_field_direction = external_field_direction
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
@@ -64,8 +64,32 @@ class EwaldPotential(nn.Module):
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
-            pot = self.compute_potential_optimized(r[mask], q[mask], box[i])
-            results.append(pot)
+            r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
+            pot = self.compute_potential_optimized(r_raw_now, q_now, box_now)
+
+            if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
+                # if self.external_field_direction is an integer, then external_field_direction is the direction index
+                if isinstance(self.external_field_direction, int):
+                    direction_index_now = self.external_field_direction
+                    # if self.external_field_direction is a string, then it is the key to the external field
+                else:
+                    try:
+                        direction_index_now = int(data[self.external_field_direction][i])
+                    except:
+                        raise ValueError("external_field_direction must be an integer or a key to the external field")
+                if isinstance(self.external_field, float):
+                    external_field_now = self.external_field
+                else:
+                    try:
+                        external_field_now = data[self.external_field][i]
+                    except:
+                        raise ValueError("external_field must be a float or a key to the external field")
+
+                pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
+            else:
+                pot_ext = 0.0
+
+            results.append(pot + pot_ext)
 
         data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
         return data
@@ -129,12 +153,7 @@ class EwaldPotential(nn.Module):
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
-        if hasattr(self, 'external_field') and self.external_field is not None:
-            pot_ext = self.add_external_field(r_raw, q, box)
-        else:
-            pot_ext = 0.0
-
-        return pot.real * self.norm_factor + pot_ext
+        return pot.real * self.norm_factor
 
     # Optimized function
     def compute_potential_optimized(self, r_raw, q, box):
@@ -191,6 +210,8 @@ class EwaldPotential(nn.Module):
 
             # Compute kfac based on the provided expression
             kfac = -1.0 * k_sq ** (3 / 2) * ( torch.pi ** 0.5 * torch.special.erfc(b) + (1 / (2 * b ** 3) - 1 / b) * torch.exp(-b_sq))
+            #kfac = -1.0 * k_sq ** (3 / 2) * torch.exp(-b_sq) # this assumed a Gaussian smearing
+
         mask = (k_sq <= self.k_sq_max) & (k_sq > 0)
         kfac[~mask] = 0
 
@@ -217,28 +238,15 @@ class EwaldPotential(nn.Module):
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
-        if hasattr(self, 'external_field') and self.external_field is not None:
-            pot_ext = self.add_external_field(r_raw, q, box)
-        else:
-            pot_ext = 0.0
+        return pot.real * self.norm_factor
 
-        return pot.real * self.norm_factor + pot_ext
-
-    def add_external_field(self, r_raw, q, box):
-        if self.external_field_direction == 'x':
-            # wrap in box
-            r = r_raw[:, 0] / box[0]
-            r =  r - torch.round(r)
-            r = r * box[0]
-        elif self.external_field_direction == 'y':
-            r = r_raw[:, 1] / box[1]
-            r =  r - torch.round(r)
-            r = r * box[1]
-        elif self.external_field_direction == 'z':
-            r = r_raw[:, 2] / box[2]
-            r =  r - torch.round(r)
-            r = r * box[2]
-        return self.external_field * torch.sum(q * r.unsqueeze(1)) #* self.external_field_norm_factor
+    def add_external_field(self, r_raw, q, box, direction_index, external_field):
+        external_field_norm_factor = (self.norm_factor/90.0474)**0.5
+        # wrap in box
+        r = r_raw[:, direction_index] / box[direction_index]
+        r =  r - torch.round(r)
+        r = r * box[direction_index]
+        return external_field * torch.sum(q * r.unsqueeze(1)) * external_field_norm_factor
 
     def change_external_field(self, external_field):
         self.external_field = external_field
