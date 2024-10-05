@@ -158,10 +158,17 @@ class LightningTrainingTask():
 
     def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10):
         if (max_steps is None) and (max_epochs is None):
-            print("Neither max_steps or max_epochs is set, defaulting to max_epochs=1000...")
+            print("Please input max_steps or max_epochs")
+            return None
+        if (max_steps is not None) and (max_epochs is not None):
+            print("Please specify either max_steps or max_epochs but not both")
+            return None
         if chkpt is not None:
             self.load(chkpt)
-        trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,max_steps=max_steps,gradient_clip_val=gradient_clip_val)
+        if max_epochs:
+            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,gradient_clip_val=gradient_clip_val)
+        elif max_steps:
+            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,gradient_clip_val=gradient_clip_val)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
     def save(self,path):
