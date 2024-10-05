@@ -156,10 +156,11 @@ class LightningTrainingTask():
                                     default_f_name = default_f_name,
         )
 
-    def fit(self,data,chkpt=None,dev_run=False,max_epochs=100,gradient_clip_val=10):
+    def fit(self,data,chkpt=None,dev_run=False,max_epochs=100,max_steps=None,gradient_clip_val=10):
+        #max_steps overrides max_epochs
         if chkpt is not None:
             self.load(chkpt)
-        trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,gradient_clip_val=gradient_clip_val)
+        trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,max_steps=max_steps,gradient_clip_val=gradient_clip_val)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
     def save(self,path):
