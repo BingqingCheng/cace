@@ -7,6 +7,7 @@ class EwaldPotential(nn.Module):
     def __init__(self,
                  dl=2.0,  # grid resolution
                  sigma=1.0,  # width of the Gaussian on each atom
+                 exponent=1, # default is for electrostattics with p=1, we can do London dispersion with p=6
                  external_field = None, # external field
                  external_field_direction: str = 'x', # external field direction
                  remove_self_interaction=True,
@@ -16,6 +17,7 @@ class EwaldPotential(nn.Module):
         super().__init__()
         self.dl = dl
         self.sigma = sigma
+        self.exponent = exponent
         self.sigma_sq_half = sigma ** 2 / 2.0
         self.twopi = 2.0 * torch.pi
         self.twopi_sq = self.twopi ** 2
@@ -30,7 +32,7 @@ class EwaldPotential(nn.Module):
         self.norm_factor = 1.0 
         # when using a norm_factor = 1, all "charges" are scaled by sqrt(90.0474)
         # the external field is then scaled by sqrt(90.0474)
-        # self.external_field_norm_factor = 1.0 / torch.sqrt(90.0474) 
+        # self.external_field_norm_factor = 1.0 / torch.sqrt(90.0474) = 1/9.48933 
         self.k_sq_max = (self.twopi / self.dl) ** 2
         self.external_field = external_field
 
@@ -40,6 +42,10 @@ class EwaldPotential(nn.Module):
             batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=data['positions'].device)
         else:
             batch_now = data["batch"]
+
+        # this is just for compatibility with the previous version
+        if hasattr(self, 'exponent') == False:
+            self.exponent = 1
         
         box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
         r = data['positions']
@@ -108,14 +114,19 @@ class EwaldPotential(nn.Module):
             for ky, kz in product(range(-nk[1], nk[1] + 1), range(-nk[2], nk[2] + 1)):
                 k_sq = self.twopi_sq * ((kx / box[0]) ** 2 + (ky / box[1]) ** 2 + (kz / box[2]) ** 2)
                 if k_sq <= self.k_sq_max and k_sq > 0:  # remove the k=0 term
-                    kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+                    if self.exponent == 1:
+                        kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+                    elif self.exponent == 6:
+                        b_sq = k_sq * self.sigma_sq_half
+                        b = torch.sqrt(b_sq)
+                        kfac = -1.0 * k_sq**(3/2) * (torch.pi**0.5 * torch.special.erfc(b) + (1 / (2 * b**3) - 1 / b) * torch.exp(-b_sq))
                     term = torch.sum(q * (eikx[:, kx].unsqueeze(1) * eiky[:, nk[1] + ky].unsqueeze(1) * eikz[:, nk[2] + kz].unsqueeze(1)), dim=0)
                     pot_list.append(factor * kfac * torch.real(torch.conj(term) * term))
 
         pot = torch.stack(pot_list).sum(axis=0) / (box[0] * box[1] * box[2])
         
 
-        if self.remove_self_interaction:
+        if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
         if hasattr(self, 'external_field') and self.external_field is not None:
@@ -170,9 +181,17 @@ class EwaldPotential(nn.Module):
         kz_sq = kz_term.view(1, 1, -1)
 
         k_sq = self.twopi_sq * (kx_sq + ky_sq + kz_sq)
-        mask = (k_sq <= self.k_sq_max) & (k_sq > 0)
 
-        kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+        if self.exponent == 1:
+            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+        elif self.exponent == 6:
+            # Calculate b_sq and b
+            b_sq = k_sq * self.sigma_sq_half
+            b = torch.sqrt(b_sq)
+
+            # Compute kfac based on the provided expression
+            kfac = -1.0 * k_sq ** (3 / 2) * ( torch.pi ** 0.5 * torch.special.erfc(b) + (1 / (2 * b ** 3) - 1 / b) * torch.exp(-b_sq))
+        mask = (k_sq <= self.k_sq_max) & (k_sq > 0)
         kfac[~mask] = 0
 
         eikx_expanded = eikx.unsqueeze(2).unsqueeze(3)
@@ -195,7 +214,7 @@ class EwaldPotential(nn.Module):
 
         pot /= (box[0] * box[1] * box[2])
 
-        if self.remove_self_interaction:
+        if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
         if hasattr(self, 'external_field') and self.external_field is not None:
