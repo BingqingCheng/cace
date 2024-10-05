@@ -8,32 +8,34 @@ from typing import Dict, Optional, List, Tuple
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
 
-def default_losses(e_weight=0.1,f_weight=1000):
+def default_losses(e_weight=0.1,f_weight=1000,e_name="energy",f_name="force"):
     e_loss = GetLoss(
-                target_name='energy',
+                target_name=e_name,
                 predict_name='pred_energy',
                 loss_fn=torch.nn.MSELoss(),
                 loss_weight=e_weight,
                 )
     f_loss = GetLoss(
-                target_name='forces',
-                predict_name='pred_forces',
+                target_name=f_name,
+                predict_name='pred_force',
                 loss_fn=torch.nn.MSELoss(),
                 loss_weight=f_weight,
             )
     return [e_loss,f_loss]
 
-def default_metrics():
+def default_metrics(e_name="energy",f_name="force"):
     e_metric = Metrics(
-                target_name='energy',
+                target_name=e_name,
                 predict_name='pred_energy',
-                name='e_metric',
+                name='e',
+                metric_keys=["rmse"],
                 per_atom=True,
             )
     f_metric = Metrics(
-                target_name='forces',
-                predict_name='pred_forces',
-                name='f_metric',
+                target_name=f_name,
+                predict_name='pred_force',
+                metric_keys=["rmse"],
+                name='f',
             )
     return [e_metric,f_metric]
 
@@ -43,27 +45,25 @@ class LightningModel(L.LightningModule):
                  model : nn.Module,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 metric_labels : List[str] = ["e","f"],
                  log_rmse : bool = True,
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
-                 pass_epoch_to_loss = False,
+                 default_f_name = "force",
+                 default_e_name = "energy",
                 ):
         super().__init__()
         if losses is None:
-            losses = default_losses()
+            losses = default_losses(e_name=default_e_name,f_name=default_f_name)
         if metrics is None:
-            metrics = default_metrics()
+            metrics = default_metrics(e_name=default_e_name,f_name=default_f_name)
         self.model = model
         self.losses = losses
         self.metrics = metrics
-        self.metric_labels = metric_labels
         self.log_rmse = log_rmse
         self.optimizer_args = optimizer_args
         self.train_args = train_args
         self.val_args = val_args
-        self.pass_epoch_to_loss = pass_epoch_to_loss
 
     def forward(self,
                 data: Dict[str, torch.Tensor],
@@ -81,13 +81,9 @@ class LightningModel(L.LightningModule):
         results = self.forward(data,self.train_args)
         
         #Calculate loss
-        epoch = self.trainer.current_epoch
-        loss_args = None
-        if self.pass_epoch_to_loss:
-            loss_args = {"epoch":epoch}
         tot_loss = 0
         for i, loss_fn in enumerate(self.losses):
-            loss = loss_fn(results,data,loss_args=loss_args)
+            loss = loss_fn(results,data)
             tot_loss = tot_loss + loss
         return tot_loss, results
         
@@ -99,21 +95,24 @@ class LightningModel(L.LightningModule):
         typ = "rmse"
         if not self.log_rmse:
             typ = "mae"
-        for i,metric in enumerate(self.metrics):
-            name = self.metric_labels[i]
+        for metric in self.metrics:
+            name = metric.name
             dct[name] = metric(results,data)[typ]
         return dct, typ
 
     def training_step(self,
                       data : Dict[int, torch.Tensor],
-                      batch_idx : int) -> torch.Tensor:
+                      batch_idx : int,
+                      log_metrics = True,
+                     ) -> torch.Tensor:
         loss, results = self.calculate_loss(data)
 
         #Calc metrics
-        batch_size = data.batch.max() + 1
-        dct, typ = self.calculate_metrics(data,results)
-        for k,v in dct.items():
-            self.log(f"train_{k}_{typ}",v,batch_size=batch_size)
+        if log_metrics:
+            batch_size = data.batch.max() + 1
+            dct, typ = self.calculate_metrics(data,results)
+            for k,v in dct.items():
+                self.log(f"train_{k}_{typ}",v,batch_size=batch_size)
         return loss
     
     def configure_optimizers(self):
@@ -139,22 +138,22 @@ class LightningTrainingTask():
                  model : nn.Module,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 metric_labels : List[str] = ["e","f"],
                  log_rmse : bool = True,
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
-                 pass_epoch_to_loss = False,
+                 default_e_name = "energy",
+                 default_f_name = "force",
                 ) -> None:
         self.model = LightningModel(model,
                                     losses = losses,
                                     metrics = metrics,
-                                    metric_labels = metric_labels,
                                     log_rmse = log_rmse,
                                     optimizer_args = optimizer_args,
                                     train_args = train_args,
                                     val_args = val_args,
-                                    pass_epoch_to_loss = pass_epoch_to_loss,
+                                    default_e_name = default_e_name,
+                                    default_f_name = default_f_name,
         )
 
     def fit(self,data,chkpt=None,dev_run=False,max_epochs=100,gradient_clip_val=10):
@@ -207,13 +206,18 @@ class LightningData(L.LightningDataModule):
                                           data_key=self.data_key,
                                           atomic_energies = self.atomic_energies
                                          )
-        self.collection = collection
         
-        self.train_loader = torch_geometric.DataLoader(
-            dataset=[
+        self.train_dataset = [
                 AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
                 for atoms in collection.train
-            ],
+            ]
+        self.valid_dataset = [
+                AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
+                for atoms in collection.valid
+            ]
+
+        self.train_loader = torch_geometric.DataLoader(
+            dataset = self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
             drop_last=True,
@@ -221,16 +225,13 @@ class LightningData(L.LightningDataModule):
         )
         
         self.valid_loader = torch_geometric.DataLoader(
-            dataset=[
-                AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
-                for atoms in collection.valid
-            ],
+            dataset = self.valid_dataset,
             batch_size=self.batch_size,
             shuffle=False,
             drop_last=False,
             num_workers=os.cpu_count()-1,
         )
-
+        
     def train_dataloader(self):
         return self.train_loader
         
