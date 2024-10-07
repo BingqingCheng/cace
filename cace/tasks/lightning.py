@@ -5,6 +5,7 @@ import lightning as L
 from . import GetLoss
 from ..tools import Metrics
 from typing import Dict, Optional, List, Tuple
+from lightning.pytorch.callbacks import LearningRateMonitor
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
 
@@ -49,14 +50,10 @@ class LightningModel(L.LightningModule):
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
-                 default_f_name = "force",
-                 default_e_name = "energy",
+                 lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
+                 scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
                 ):
         super().__init__()
-        if losses is None:
-            losses = default_losses(e_name=default_e_name,f_name=default_f_name)
-        if metrics is None:
-            metrics = default_metrics(e_name=default_e_name,f_name=default_f_name)
         self.model = model
         self.losses = losses
         self.metrics = metrics
@@ -64,6 +61,8 @@ class LightningModel(L.LightningModule):
         self.optimizer_args = optimizer_args
         self.train_args = train_args
         self.val_args = val_args
+        self.lr_scheduler = lr_scheduler
+        self.scheduler_args = scheduler_args
 
     def forward(self,
                 data: Dict[str, torch.Tensor],
@@ -117,7 +116,16 @@ class LightningModel(L.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_args)
-        return optimizer
+        lr_scheduler = self.lr_scheduler(optimizer,**self.scheduler_args)
+        lr_scheduler_config = {
+            "scheduler": lr_scheduler,
+            "interval": "epoch",
+            "frequency": 1,
+            "monitor": "val_loss",
+            "strict": True,
+        }
+        opt_info = {"optimizer": optimizer,"lr_scheduler": lr_scheduler_config}
+        return opt_info
 
     def validation_step(self,
                       data : Dict[int, torch.Tensor],
@@ -127,6 +135,13 @@ class LightningModel(L.LightningModule):
         #Get data
         with torch.enable_grad(): #for forces
             results = self.forward(data,self.val_args)
+
+        #Log loss for lr scheduler
+        tot_loss = 0
+        for i, loss_fn in enumerate(self.losses):
+            loss = loss_fn(results,data)
+            tot_loss = tot_loss + loss
+        self.log(f"val_loss",tot_loss,batch_size=batch_size)
 
         #Log metrics
         dct, typ = self.calculate_metrics(data,results)
@@ -142,8 +157,8 @@ class LightningTrainingTask():
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
-                 default_e_name = "energy",
-                 default_f_name = "force",
+                 lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
+                 scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
                 ) -> None:
         self.model = LightningModel(model,
                                     losses = losses,
@@ -152,8 +167,8 @@ class LightningTrainingTask():
                                     optimizer_args = optimizer_args,
                                     train_args = train_args,
                                     val_args = val_args,
-                                    default_e_name = default_e_name,
-                                    default_f_name = default_f_name,
+                                    lr_scheduler = lr_scheduler,
+                                    scheduler_args = scheduler_args
         )
 
     def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10):
@@ -165,10 +180,15 @@ class LightningTrainingTask():
             return None
         if chkpt is not None:
             self.load(chkpt)
+            if max_steps is not None:
+                max_steps += self.global_step
+            elif max_epochs is not None:
+                max_epochs += self.epoch
+        lr_monitor = LearningRateMonitor(logging_interval='step') #to log the lr
         if max_epochs:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,gradient_clip_val=gradient_clip_val)
+            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor])
         elif max_steps:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,gradient_clip_val=gradient_clip_val)
+            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor])
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
     def save(self,path):
@@ -179,9 +199,10 @@ class LightningTrainingTask():
     def load(self,path):
         print("Loading model from",path,"...")
         state_dict = torch.load(path, weights_only=True)
+        self.epoch = state_dict["epoch"]
+        self.global_step = state_dict["global_step"]
         self.model.load_state_dict(state_dict["state_dict"])
         print("Loading successful!")
-
 
 #Data
 from ..tools import torch_geometric
