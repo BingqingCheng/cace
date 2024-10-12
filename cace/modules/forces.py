@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict,Optional
 import torch
 from torch import nn
 
@@ -48,22 +48,38 @@ class Forces(nn.Module):
         if self.calc_forces or self.calc_stress:
             self.required_derivatives.append('positions')
 
-    def forward(self, data: Dict[str, torch.Tensor], training: bool = False, output_index: int = None) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor], training: bool = False, output_index: Optional[int] = None) -> Dict[str, torch.Tensor]:
+        #added, if displacement and cell are not in data, set them to zero
+        # Explicitly check for 'displacement' key
+        if 'displacement' in data:
+            displacement = data['displacement']
+        else:
+            displacement = torch.zeros_like(data['positions'])
+
+        # Explicitly check for 'cell' key
+        if 'cell' in data:
+            cell = data['cell']
+        else:
+            cell = torch.zeros(data['positions'].size(0), 3, 3, device=data['positions'].device)
+
         forces, virials, stress = get_outputs(
             energy=data[self.energy_key][:, output_index] if output_index is not None and len(data[self.energy_key].shape) == 2 else data[self.energy_key],
             positions=data['positions'],
-            displacement=data.get('displacement', None),
-            cell=data.get('cell', None),
+            displacement=displacement,  # Use the displacement variable, revised
+            cell=cell,                  # Use the cell variable, revised
+            # displacement=data.get('displacement', None),
+            # cell=data.get('cell', None),
             training=training,
             compute_force=self.calc_forces,
             #compute_virials=self.calc_virials,
             compute_stress=self.calc_stress
             )
 
-        data[self.forces_key] = forces
-        if self.virial_key is not None:
+        if forces is not None:
+            data[self.forces_key] = forces
+        if self.virial_key is not None and virials is not None:
             data[self.virial_key] = virials
-        if self.stress_key is not None:
+        if self.stress_key is not None and stress is not None:
             data[self.stress_key] = stress
         return data 
 

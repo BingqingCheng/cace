@@ -58,28 +58,49 @@ class NodeEncoder(nn.Module):
         self.num_classes = len(zs)
         self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.int64))
 
-    def forward(self, atomic_numbers) -> torch.Tensor:
-        device = atomic_numbers.device
-
-        # Directly convert atomic numbers to indices using the precomputed map
+    #added
+    def forward(self, atomic_numbers: torch.Tensor) -> torch.Tensor:
+        # Convert atomic numbers to indices using the precomputed map
         indices = self.index_map[atomic_numbers]
 
-        # raise an error if there are out-of-range atomic numbers
+        # Raise an error if there are out-of-range atomic numbers
         if (indices < 0).any():
             raise ValueError(f"Atomic numbers out of range: {atomic_numbers[indices < 0]}")
 
         # Generate one-hot encoding
-        one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes, device=device)
+        one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes)
 
         return one_hot_encoding
 
-    def to_one_hot(self, indices: torch.Tensor, num_classes: int, device=torch.device) -> torch.Tensor:
+    def to_one_hot(self, indices: torch.Tensor, num_classes: int) -> torch.Tensor:
         shape = indices.shape[:-1] + (num_classes,)
-        oh = torch.zeros(shape, device=device)
-
-        # scatter_ is the in-place version of scatter
+        # Create zeros on the same device and with the same dtype as indices
+        oh = torch.zeros(shape, dtype=torch.float32, device=indices.device)
         oh.scatter_(dim=-1, index=indices, value=1)
         return oh
+
+    # def forward(self, atomic_numbers) -> torch.Tensor:
+    #     device = atomic_numbers.device
+
+    #     # Directly convert atomic numbers to indices using the precomputed map
+    #     indices = self.index_map[atomic_numbers]
+
+    #     # raise an error if there are out-of-range atomic numbers
+    #     if (indices < 0).any():
+    #         raise ValueError(f"Atomic numbers out of range: {atomic_numbers[indices < 0]}")
+
+    #     # Generate one-hot encoding
+    #     one_hot_encoding = self.to_one_hot(indices.unsqueeze(-1), num_classes=self.num_classes, device=device)
+
+    #     return one_hot_encoding
+
+    # def to_one_hot(self, indices: torch.Tensor, num_classes: int, device=torch.device) -> torch.Tensor:
+    #     shape = indices.shape[:-1] + (num_classes,)
+    #     oh = torch.zeros(shape, device=device)
+
+    #     # scatter_ is the in-place version of scatter
+    #     oh.scatter_(dim=-1, index=indices, value=1)
+    #     return oh
 
     def __repr__(self):
         return (
@@ -137,6 +158,9 @@ class NodeEmbedding(nn.Module):
             f"{self.__class__.__name__}(num_classes={self.embedding_weights.shape[0]}, embedding_dim={self.embedding_weights.shape[1]})"
         )
 
+#added
+from typing import Optional
+
 class EdgeEncoder(nn.Module):
     def __init__(self, directed=True):
         super().__init__()
@@ -145,8 +169,9 @@ class EdgeEncoder(nn.Module):
     def forward(self,     
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
-               node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
-               *args, **kwargs
+               node_type_2: torch.Tensor = None  # [n_nodes, n_dims] ##added
+            #    node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
+            #    *args, **kwargs
                ) -> torch.Tensor:
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)

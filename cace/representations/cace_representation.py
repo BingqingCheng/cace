@@ -121,6 +121,7 @@ class Cace(nn.Module):
         #self.radial_transform = torch.jit.script(radial_transform)
 
         self.l_list = self.angular_basis.get_lxlylz_list()
+        # self.l_list = self.angular_basis.get_lxlylz_list_str() ##added
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
         # the JIT version seems to be slower
         #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)
@@ -162,7 +163,7 @@ class Cace(nn.Module):
     ):
         # setup
         n_nodes = data['positions'].shape[0]
-        if data["batch"] == None:
+        if data["batch"] is None: # revised == to is
             batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=self.device)
         else:
             batch_now = data["batch"]
@@ -179,8 +180,8 @@ class Cace(nn.Module):
         ## get the edge type
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
                                          node_type=node_embedded_sender,
-                                         node_type_2=node_embedded_receiver,
-                                         data=data)
+                                         node_type_2=node_embedded_receiver,)
+                                        #  data=data) ##revised
 
         # compute angular and radial terms
         edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
@@ -266,10 +267,15 @@ class Cace(nn.Module):
         else:
             node_feats_A_out = None
 
-        try:
+        #added
+        displacement: Optional[torch.Tensor] = None
+        if "displacement" in data:
             displacement = data["displacement"]
-        except:
-            displacement = None
+        
+        # try:
+        #     displacement = data["displacement"]
+        # except:
+        #     displacement = None
 
         output = {
             "positions": data["positions"],
