@@ -171,7 +171,7 @@ class LightningTrainingTask():
                                     scheduler_args = scheduler_args
         )
 
-    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10,accelerator="auto",name=None):
+    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10,accelerator="auto",name=None,progress_bar=True):
         from lightning.pytorch.loggers import TensorBoardLogger
         logger = TensorBoardLogger("lightning_logs",name=name)
         if (max_steps is None) and (max_epochs is None):
@@ -188,10 +188,10 @@ class LightningTrainingTask():
                 max_epochs += self.epoch
         lr_monitor = LearningRateMonitor(logging_interval='step') #to log the lr
         if max_epochs:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,
+            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
                                 gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
         elif max_steps:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,
+            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
                                 gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
