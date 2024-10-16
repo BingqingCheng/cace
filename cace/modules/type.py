@@ -162,17 +162,22 @@ class NodeEmbedding(nn.Module):
 from typing import Optional
 
 class EdgeEncoder(nn.Module):
-    def __init__(self, directed=True):
+    def __init__(self, directed: bool =True): #revised added annotation
         super().__init__()
         self.directed = directed
 
     def forward(self,     
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
-               node_type_2: torch.Tensor = None  # [n_nodes, n_dims] ##added
+               node_type_2: Optional[torch.Tensor] = None,  # [n_nodes, n_dims] ##added
             #    node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
             #    *args, **kwargs
+                # data: Dict[str, torch.Tensor] = None,
                ) -> torch.Tensor:
+        
+        if node_type_2 is None: #added
+            node_type_2 = node_type.clone()
+
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
 

@@ -24,7 +24,7 @@ from ..modules import (
 __all__ = ["Cace"]
 
 class Cace(nn.Module):
-
+    forward_features: List[str] #added
     def __init__(
         self,
         zs: Sequence[int],
@@ -136,7 +136,8 @@ class Cace(nn.Module):
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
                     **args_message_passing["M"] if "M" in args_message_passing else {}
-                    ) if "M" in type_message_passing else None,
+                    ) if "M" in type_message_passing else nn.Identity(), #revised
+                    # ) if "M" in type_message_passing else None,
 
                 MessageAr(
                     cutoff=cutoff,
@@ -144,12 +145,14 @@ class Cace(nn.Module):
                     radial_embedding_dim=self.n_radial_basis,
                     channel_dim=self.n_edge_channels,
                     **args_message_passing["Ar"] if "Ar" in args_message_passing else {}
-                    ) if "Ar" in type_message_passing else None,
+                    ) if "Ar" in type_message_passing else nn.Identity(), #revised
+                    # ) if "Ar" in type_message_passing else None,
 
                 MessageBchi(
                     lxlylz_index = self.angular_basis.get_lxlylz_index(),
                     **args_message_passing["Bchi"] if "Bchi" in args_message_passing else {}
-                    ) if "Bchi" in type_message_passing else None,
+                    ) if "Bchi" in type_message_passing else nn.Identity(), #revised
+                    # ) if "Bchi" in type_message_passing else None,
             ]) 
             for _ in range(self.num_message_passing)
             ])
@@ -219,13 +222,19 @@ class Cace(nn.Module):
         node_feats_list.append(node_feat_B)
 
         # message passing
-        for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
-            if nm is not None:
+        # for nm, mp_Ar, mp_Bchi in self.message_passing_list: 
+        for mp_layer in self.message_passing_list: #revised
+            nm = mp_layer[0]
+            mp_Ar = mp_layer[1]
+            mp_Bchi = mp_layer[2]
+            # if nm is not None :
+            if not isinstance(nm, nn.Identity): #revised 
                 momeory_now = nm(node_feat=node_feat_A)
             else:
                 momeory_now = 0.0
 
-            if mp_Bchi is not None:
+            # if mp_Bchi is not None:
+            if not isinstance(mp_Bchi, nn.Identity): #revised
                 message_Bchi = mp_Bchi(node_feat=node_feat_B,
                     edge_attri=edge_attri,
                     edge_index=data["edge_index"],
@@ -239,7 +248,8 @@ class Cace(nn.Module):
             else:
                 node_feat_A_Bchi = 0.0 
 
-            if mp_Ar is not None:
+            # if mp_Ar is not None:
+            if not isinstance(mp_Ar, nn.Identity): #revised
                 message_Ar = mp_Ar(node_feat=node_feat_A,
                     edge_lengths=edge_lengths,
                     radial_cutoff_fn=radial_cutoff,
