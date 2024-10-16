@@ -182,10 +182,6 @@ class LightningTrainingTask():
             return None
         if chkpt is not None:
             self.load(chkpt)
-            if max_steps is not None:
-                max_steps += self.global_step
-            elif max_epochs is not None:
-                max_epochs += self.epoch
         lr_monitor = LearningRateMonitor(logging_interval='step') #to log the lr
         if max_epochs:
             trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
