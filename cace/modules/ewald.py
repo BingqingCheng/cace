@@ -264,11 +264,10 @@ class EwaldPotential(nn.Module):
         eik = eikx_expanded * eiky_expanded * eikz_expanded
         sk = torch.sum(q_expanded * eik.unsqueeze(1), dim=[0])
         sk_conj = torch.conj(sk)
-        sk_field = 2. * kfac.unsqueeze(0) * sk_conj # the factor of 2 comes from normalization factor 2\epsilon
- 
-        pot = (kfac.unsqueeze(0) * factor.view(1, -1, 1, 1) * torch.real(torch.conj(sk) * sk)).sum(dim=[1, 2, 3])
+        pot = (kfac.unsqueeze(0) * factor.view(1, -1, 1, 1) * torch.real(sk_conj * sk)).sum(dim=[1, 2, 3])
         # The reverse transform to get the real-space potential field
         if compute_field:
+            sk_field = 2. * kfac.unsqueeze(0) * sk_conj  # the factor of 2 comes from normalization factor 2\epsilon
             q_field = (factor.view(1, 1, -1, 1, 1) * torch.real(eik.unsqueeze(1) * sk_field.unsqueeze(0))).sum(dim=[2, 3, 4])
             q_field /= volume
 
