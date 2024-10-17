@@ -27,7 +27,7 @@ class EwaldPotential(nn.Module):
         self.feature_key = feature_key
         self.output_key = output_key
         self.aggregation_mode = aggregation_mode
-        self.model_outputs = [output_key, feature_key+'_field']
+        self.model_outputs = [output_key]
         # 1/2\epsilon_0, where \epsilon_0 is the vacuum permittivity
         # \epsilon_0 = 5.55263*10^{-3} e^2 eV^{-1} A^{-1}
         #self.norm_factor = 90.0474
@@ -38,6 +38,8 @@ class EwaldPotential(nn.Module):
         self.external_field = external_field
         self.external_field_direction = external_field_direction
         self.compute_field = compute_field
+        if self.compute_field:
+            self.model_outputs.append(feature_key+'_field')
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
