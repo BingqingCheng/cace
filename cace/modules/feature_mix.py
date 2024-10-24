@@ -64,7 +64,7 @@ class FeatureInteract(nn.Module):
 
         # Dynamically initialize weights based on the reshaped feature sizes during the forward pass
         if self.weights is None:
-            self.weights = nn.Parameter(torch.randn(flattened_size2, flattened_size1, dtype=torch.get_default_dtype()))
+            self.weights = nn.Parameter(torch.randn(flattened_size2, flattened_size1, dtype=torch.get_default_dtype(), device=feature1.device))
 
         # Perform the interaction using einsum on the reshaped tensors
         interaction_result = feature1_reshaped * torch.einsum('ij,jk->ik', feature2_reshaped, self.weights)
