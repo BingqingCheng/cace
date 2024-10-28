@@ -7,6 +7,7 @@ from .angular_tools import (
     find_combo_vectors_nu3,
     find_combo_vectors_nu3_str, #added
     find_combo_vectors_nu4
+    find_combo_vectors_nu4_str, #added
     )
 
 __all__ = ['Symmetrizer', 'Symmetrizer_JIT', 'Symmetrizer_Tensor']
@@ -140,12 +141,12 @@ class Symmetrizer(nn.Module):
             raise NotImplementedError("max_nu > 4 is not supported yet.")
         self.vec_dict_allnu = {}
         if max_nu >= 2:
-            self.vec_dict_allnu[2]  = find_combo_vectors_nu2_str(self.max_l)
+            self.vec_dict_allnu[2]  = find_combo_vectors_nu2_str(self.max_l) #revised
         if max_nu >= 3:
             # self.vec_dict_allnu[3]  = find_combo_vectors_nu3(self.max_l)[0]
             self.vec_dict_allnu[3]  = find_combo_vectors_nu3_str(self.max_l) #revised
         if max_nu == 4:
-            self.vec_dict_allnu[4]  = find_combo_vectors_nu4(self.max_l)[0]
+            self.vec_dict_allnu[4]  = find_combo_vectors_nu4_str(self.max_l) #revised
 
         self.indice_dict_allnu = {nu: {} for nu in range(2, self.max_nu + 1)}
         # self.indice_dict_allnu = {} # added, dictionary to store indices
