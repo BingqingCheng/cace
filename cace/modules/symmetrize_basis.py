@@ -6,8 +6,8 @@ from .angular_tools import (
     find_combo_vectors_nu2_str, #added
     find_combo_vectors_nu3,
     find_combo_vectors_nu3_str, #added
-    find_combo_vectors_nu4
-    find_combo_vectors_nu4_str, #added
+    find_combo_vectors_nu4,
+    find_combo_vectors_nu4_str #added)
     )
 
 __all__ = ['Symmetrizer', 'Symmetrizer_JIT', 'Symmetrizer_Tensor']
