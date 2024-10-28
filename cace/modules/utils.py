@@ -74,15 +74,15 @@ def compute_forces_virials(
     training: bool = False,
     compute_stress: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    # displacement와 cell이 None인 경우 영(0) 텐서로 대체
+    # if displacement and cell is None, set them to zero tensors
     if displacement is None:
-        displacement = torch.zeros_like(positions)  # 적절한 크기의 영 텐서
+        displacement = torch.zeros_like(positions)  # 0 tensor
     if cell is None:
         cell = torch.zeros(positions.size(0), 3, 3, device=positions.device)
 
     grad_outputs = torch.jit.annotate(Optional[List[Optional[torch.Tensor]]], [torch.ones_like(energy)]) #revised
     # grad_outputs: Optional[List[Optional[torch.Tensor]]] = [torch.ones_like(energy)]
-    inputs = [positions, displacement]  # inputs의 길이와 구조를 고정
+    inputs = [positions, displacement]  # fix the input's length and structure
 
     grads = torch.autograd.grad(
         outputs=[energy],
