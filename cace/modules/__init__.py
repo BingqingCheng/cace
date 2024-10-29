@@ -29,3 +29,5 @@ from .forces import *
 from .interaction import *
 
 from .transform import *
+
+from .feature_mix import *

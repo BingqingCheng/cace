@@ -10,10 +10,12 @@ class EwaldPotential(nn.Module):
                  exponent=1, # default is for electrostattics with p=1, we can do London dispersion with p=6
                  external_field = None, # external field
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z
-                 remove_self_interaction=True,
+                 remove_self_interaction=False,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
-                 aggregation_mode: str = "sum"):
+                 aggregation_mode: str = "sum",
+                 compute_field: bool = False,
+                 ):
         super().__init__()
         self.dl = dl
         self.sigma = sigma
@@ -35,6 +37,9 @@ class EwaldPotential(nn.Module):
         self.k_sq_max = (self.twopi / self.dl) ** 2
         self.external_field = external_field
         self.external_field_direction = external_field_direction
+        self.compute_field = compute_field
+        if self.compute_field:
+            self.model_outputs.append(feature_key+'_field')
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
@@ -46,6 +51,8 @@ class EwaldPotential(nn.Module):
         # this is just for compatibility with the previous version
         if hasattr(self, 'exponent') == False:
             self.exponent = 1
+        if hasattr(self, 'compute_field') == False:
+            self.compute_field = False
         
         box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
         r = data['positions']
@@ -61,11 +68,13 @@ class EwaldPotential(nn.Module):
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
 
         results = []
+        field_results = []
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
-            pot = self.compute_potential_optimized(r_raw_now, q_now, box_now)
+            pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
+            #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
 
             if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
                 # if self.external_field_direction is an integer, then external_field_direction is the direction index
@@ -90,15 +99,20 @@ class EwaldPotential(nn.Module):
                 pot_ext = 0.0
 
             results.append(pot + pot_ext)
+            field_results.append(field)
 
         data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
+        if self.compute_field:
+            data[self.feature_key+'_field'] = torch.cat(field_results, dim=0)
         return data
 
-    def compute_potential(self, r_raw, q, box):
+    def compute_potential(self, r_raw, q, box, compute_field=False):
         """ Compute the Ewald long-range potential for one configuration """
         dtype = torch.complex64 if r_raw.dtype == torch.float32 else torch.complex128
         device = r_raw.device
 
+
+        volume = box[0] * box[1] * box[2]
         r = r_raw / box  # Work with scaled positions
         # r =  r - torch.round(r) # periodic boundary condition
 
@@ -130,9 +144,12 @@ class EwaldPotential(nn.Module):
             eikz[:, k] = torch.conj(eikz[:, 2 * nk[2] - k])
 
         pot_list = []
+        q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device) # Field due to q
+        #q_field = torch.zeros_like(q, dtype=dtype, device=device) # Field due to q
 
         
         for kx in range(nk[0] + 1):
+            # for negative kx, the Fourier transform is just the complex conjugate of the positive kx
             factor = 1.0 if kx == 0 else 2.0
 
             for ky, kz in product(range(-nk[1], nk[1] + 1), range(-nk[2], nk[2] + 1)):
@@ -144,23 +161,34 @@ class EwaldPotential(nn.Module):
                         b_sq = k_sq * self.sigma_sq_half
                         b = torch.sqrt(b_sq)
                         kfac = -1.0 * k_sq**(3/2) * (torch.pi**0.5 * torch.special.erfc(b) + (1 / (2 * b**3) - 1 / b) * torch.exp(-b_sq))
-                    term = torch.sum(q * (eikx[:, kx].unsqueeze(1) * eiky[:, nk[1] + ky].unsqueeze(1) * eikz[:, nk[2] + kz].unsqueeze(1)), dim=0)
-                    pot_list.append(factor * kfac * torch.real(torch.conj(term) * term))
+                    eik = (eikx[:, kx] * eiky[:, nk[1] + ky] * eikz[:, nk[2] + kz]).unsqueeze(1) # [n, 1]
+                    sk = torch.sum(q * eik, dim=0) # [n_q]
+                    sk_conj = torch.conj(sk)
+                    sk_field = 2. * kfac * sk_conj # the factor of 2 comes from normalization factor 2\epsilon
+                    pot_list.append(factor * kfac * torch.real(sk * sk_conj))
+                    if compute_field:
+                        # The reverse transform to get the real-space potential field
+                        q_field += factor * torch.real(sk_field.unsqueeze(0) * eik)
 
-        pot = torch.stack(pot_list).sum(axis=0) / (box[0] * box[1] * box[2])
-        
+        pot = torch.stack(pot_list).sum(axis=0) / volume
+        if compute_field:
+            q_field /= volume
+        #print(pot, torch.sum(q * q_field, dim=0)) should be the same
 
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
-        return pot.real * self.norm_factor
+        return pot.real * self.norm_factor, q_field * self.norm_factor
 
     # Optimized function
-    def compute_potential_optimized(self, r_raw, q, box):
+    def compute_potential_optimized(self, r_raw, q, box, compute_field=False):
         dtype = torch.complex64 if r_raw.dtype == torch.float32 else torch.complex128
         device = r_raw.device
 
+        volume = box[0] * box[1] * box[2]
         r = r_raw / box
+
+        q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device) # Field due to q
 
         nk = (box / self.dl).int().tolist()
         nk = [max(1, k) for k in nk]
@@ -199,10 +227,10 @@ class EwaldPotential(nn.Module):
         ky_sq = ky_term.view(1, -1, 1)
         kz_sq = kz_term.view(1, 1, -1)
 
-        k_sq = self.twopi_sq * (kx_sq + ky_sq + kz_sq)
+        k_sq = self.twopi_sq * (kx_sq + ky_sq + kz_sq) # [nx, ny, nz]
 
         if self.exponent == 1:
-            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq # [nx, ny, nz]
         elif self.exponent == 6:
             # Calculate b_sq and b
             b_sq = k_sq * self.sigma_sq_half
@@ -215,30 +243,40 @@ class EwaldPotential(nn.Module):
         mask = (k_sq <= self.k_sq_max) & (k_sq > 0)
         kfac[~mask] = 0
 
-        eikx_expanded = eikx.unsqueeze(2).unsqueeze(3)
-        eiky_expanded = eiky.unsqueeze(1).unsqueeze(3)
-        eikz_expanded = eikz.unsqueeze(1).unsqueeze(2)
+        eikx_expanded = eikx.unsqueeze(2).unsqueeze(3) #[n_node, n_x, 1, 1]
+        eiky_expanded = eiky.unsqueeze(1).unsqueeze(3) #[n_node, 1, n_y, 1]
+        eikz_expanded = eikz.unsqueeze(1).unsqueeze(2) #[n_node, 1, 1, n_z]
 
-        factor = torch.ones_like(kx, dtype=dtype, device=device)
+        factor = torch.ones_like(kx, dtype=r_raw.dtype, device=device)
         factor[1:] = 2.0
 
         if q.dim() == 1:
+            # [n_node, n_q, 1, 1, 1]
             q_expanded = q.unsqueeze(1).unsqueeze(2).unsqueeze(3).unsqueeze(4)
         elif q.dim() == 2:
             q_expanded = q.unsqueeze(2).unsqueeze(3).unsqueeze(4)
         else:
             raise ValueError("q must be 1D or 2D tensor")
+        # q_expanded: [n_node, n_q, 1, 1, 1]
+        # eik: [n_node, n_x, n_x, n_z]
+        # sk: [n_q, n_x, n_y, n_z]
+        # kfac: [n_x, n_y, n_z]
+        eik = eikx_expanded * eiky_expanded * eikz_expanded
+        sk = torch.sum(q_expanded * eik.unsqueeze(1), dim=[0])
+        sk_conj = torch.conj(sk)
+        pot = (kfac.unsqueeze(0) * factor.view(1, -1, 1, 1) * torch.real(sk_conj * sk)).sum(dim=[1, 2, 3])
+        # The reverse transform to get the real-space potential field
+        if compute_field:
+            sk_field = 2. * kfac.unsqueeze(0) * sk_conj  # the factor of 2 comes from normalization factor 2\epsilon
+            q_field = (factor.view(1, 1, -1, 1, 1) * torch.real(eik.unsqueeze(1) * sk_field.unsqueeze(0))).sum(dim=[2, 3, 4])
+            q_field /= volume
 
-        term = torch.sum(q_expanded * (eikx_expanded * eiky_expanded * eikz_expanded).unsqueeze(1), dim=[0])
-    
-        pot = (kfac.unsqueeze(0) * factor.view(1, -1, 1, 1) * torch.real(torch.conj(term) * term)).sum(dim=[1, 2, 3])
-
-        pot /= (box[0] * box[1] * box[2])
+        pot /= volume
 
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
 
-        return pot.real * self.norm_factor
+        return pot.real * self.norm_factor, q_field * self.norm_factor
 
     def add_external_field(self, r_raw, q, box, direction_index, external_field):
         external_field_norm_factor = (self.norm_factor/90.0474)**0.5
