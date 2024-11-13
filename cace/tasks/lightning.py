@@ -51,6 +51,7 @@ class LightningModel(L.LightningModule):
                  train_args = {"training":True},
                  val_args = {"training":False},
                  lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
+                 lr_scheduler_config = {"interval": "epoch","frequency": 1,"monitor": "val_loss","strict": True},
                  scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
                 ):
         super().__init__()
@@ -63,6 +64,7 @@ class LightningModel(L.LightningModule):
         self.val_args = val_args
         self.lr_scheduler = lr_scheduler
         self.scheduler_args = scheduler_args
+        self.lr_scheduler_config = lr_scheduler_config
 
     def forward(self,
                 data: Dict[str, torch.Tensor],
@@ -117,13 +119,8 @@ class LightningModel(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_args)
         lr_scheduler = self.lr_scheduler(optimizer,**self.scheduler_args)
-        lr_scheduler_config = {
-            "scheduler": lr_scheduler,
-            "interval": "epoch",
-            "frequency": 1,
-            "monitor": "val_loss",
-            "strict": True,
-        }
+        lr_scheduler_config = self.lr_scheduler_config
+        lr_scheduler_config["scheduler"] = lr_scheduler
         opt_info = {"optimizer": optimizer,"lr_scheduler": lr_scheduler_config}
         return opt_info
 
@@ -159,7 +156,9 @@ class LightningTrainingTask():
                  val_args = {"training":False},
                  lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
                  scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
+                 lr_frequency = 1
                 ) -> None:
+        lr_scheduler_config = {"interval": "epoch","frequency": lr_frequency,"monitor": "val_loss","strict": True}
         self.model = LightningModel(model,
                                     losses = losses,
                                     metrics = metrics,
@@ -168,10 +167,12 @@ class LightningTrainingTask():
                                     train_args = train_args,
                                     val_args = val_args,
                                     lr_scheduler = lr_scheduler,
-                                    scheduler_args = scheduler_args
+                                    scheduler_args = scheduler_args,
+                                    lr_scheduler_config = lr_scheduler_config
         )
 
-    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,gradient_clip_val=10,accelerator="auto",name=None,progress_bar=True):
+    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,check_val_every_n_epoch=1,
+            gradient_clip_val=10,accelerator="auto",name=None,progress_bar=True):
         from lightning.pytorch.loggers import TensorBoardLogger
         logger = TensorBoardLogger("lightning_logs",name=name)
         if (max_steps is None) and (max_epochs is None):
@@ -184,10 +185,10 @@ class LightningTrainingTask():
             self.load(chkpt)
         lr_monitor = LearningRateMonitor(logging_interval='step') #to log the lr
         if max_epochs:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
+            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
                                 gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
         elif max_steps:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
+            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
                                 gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
