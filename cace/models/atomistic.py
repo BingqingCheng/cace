@@ -204,3 +204,68 @@ class NeuralNetworkPotential(AtomisticModel):
         results = self.extract_outputs(data)
 
         return results
+    
+class NeuralNetworkPotentialNoForces(AtomisticModel):
+    """
+    NeuralNetworkPotential class excluding the Forces module.
+    Does not use required_derivatives and model_outputs to maintain TorchScript compatibility.
+    """
+    def __init__(
+        self,
+        representation: nn.Module,
+        input_modules: Optional[List[nn.Module]] = None,
+        output_modules: Optional[List[nn.Module]] = None,
+        postprocessors: Optional[List[Transform]] = None,
+        do_postprocessing: bool = False,
+    ):
+        super().__init__(
+            postprocessors=postprocessors,
+            do_postprocessing=do_postprocessing,
+        )
+        self.representation = representation
+        self.input_modules = nn.ModuleList(input_modules) if input_modules else nn.ModuleList()
+        self.output_modules = nn.ModuleList(output_modules) if output_modules else nn.ModuleList()
+        self.register_buffer('dummy_buffer', torch.empty(0))  # Added to allow TorchScript to infer the device
+
+        # Set model_outputs to the model_outputs of output_modules
+        self.model_outputs = []
+        for m in self.output_modules:
+            if hasattr(m, 'model_outputs') and m.model_outputs:
+                self.model_outputs.extend(m.model_outputs)
+        # Remove duplicates
+        self.model_outputs = list(set(self.model_outputs))
+
+    def forward(
+        self,
+        data: Dict[str, torch.Tensor],
+        training: bool = False,
+        compute_stress: bool = False,
+        compute_virials: bool = False,
+        output_index: Optional[int] = None,
+    ) -> Dict[str, torch.Tensor]:
+        device = self.dummy_buffer.device
+
+        # Process data through input modules
+        for m in self.input_modules:
+            data = m(data, compute_stress=compute_stress, compute_virials=compute_virials)
+        # Apply representation module
+        data = self.representation(data)
+
+        # Separate conditionals to allow TorchScript to clearly infer types
+        new_data: Dict[str, torch.Tensor] = {}
+        for key, value in data.items():
+            if value is None:
+                new_data[key] = torch.zeros(1, device=device, dtype=torch.float32)
+            else:
+                new_data[key] = value
+        data = new_data
+
+        # Process data through output modules
+        for m in self.output_modules:
+            data = m(data, training=training, output_index=output_index)
+        # Apply postprocessing
+        data = self.postprocess(data)
+        # Extract results
+        results = self.extract_outputs(data)
+
+        return results
