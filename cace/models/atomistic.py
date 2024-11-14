@@ -6,7 +6,7 @@ import torch.nn as nn
 from ..modules import Transform
 from ..tools import torch_geometric
 
-__all__ = ["AtomisticModel", "NeuralNetworkPotential"]
+__all__ = ["AtomisticModel", "NeuralNetworkPotential", "NeuralNetworkPotentialNoForces"]
 
 
 class AtomisticModel(nn.Module):
