@@ -40,7 +40,7 @@ class CombinePotential(nn.Module):
 
         self.out_keys = []
         for key in potential_keys[0]:
-            if all(key in potential_key for potential_key in self.potential_keys):
+            if all(key in potential_key for potential_key in self.potential_keys) and key != 'weight':
                 self.out_keys.append(key)
 
         if operation is None:
