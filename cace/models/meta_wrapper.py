@@ -22,16 +22,20 @@ class MetatensorWrapper(nn.Module):
         # Load the pre-trained TorchScript model
         self.model = torch.jit.load(model_path, map_location=device)
         self.atomic_energies = atomic_energies
-
+        self.model.to(device)
+        self.device = device
+        
     def requested_neighbor_lists(self) -> List[NeighborListOptions]:
         return [
             NeighborListOptions(
                 cutoff=5.5,       # cutoff radius
-                full_list=True,   # full neighbor list
+                full_list=True,
+                strict=True, # full neighbor list
             ),            
             NeighborListOptions(
                 cutoff=5.5,       # cutoff radius
-                full_list=False,   # half neighbor list
+                full_list=False,
+                strict=True, # half neighbor list
             )]
     
     def forward(
@@ -68,17 +72,17 @@ class MetatensorWrapper(nn.Module):
         # Iterate over the systems
         for system_index, system in enumerate(systems):
             # Extract tensor data from the System object
-            positions = system.positions  # Tensor [n_nodes, 3]
-            atomic_numbers = system.types  # Tensor [n_nodes]
-            cell = system.cell  # Tensor [3, 3]
+            positions = system.positions.to(self.device)  # Tensor [n_nodes, 3]
+            atomic_numbers = system.types.to(self.device)  # Tensor [n_nodes]
+            cell = system.cell.to(self.device)  # Tensor [3, 3]
             # Extract data from the neighbor list
             neighbors: TensorBlock = system.get_neighbor_list(neighbor_list_options)
-            edge_index = torch.stack([ neighbors.samples.values[:, 0].to(torch.long),  # first_atom
-                                        neighbors.samples.values[:, 1].to(torch.long)])   # second_atom
-            unit_shifts = neighbors.samples.values[:, 2:5]
+            edge_index = torch.stack([ neighbors.samples.values[:, 0].to(torch.long).to(self.device),  # first_atom
+                                        neighbors.samples.values[:, 1].to(torch.long).to(self.device)])   # second_atom
+            unit_shifts = neighbors.samples.values[:, 2:5].to(self.device)
             shifts = torch.matmul(unit_shifts.to(cell.dtype), cell)
             # Batch tensor (all zeros since it's a single system)
-            batch = torch.zeros(atomic_numbers.shape[0], dtype=torch.long)
+            batch = torch.zeros(atomic_numbers.shape[0], dtype=torch.long).to(self.device)
 
             # Prepare the data dictionary
             data: Dict[str, Tensor] = {
@@ -95,12 +99,12 @@ class MetatensorWrapper(nn.Module):
             prediction = self.model(data)
 
             if self.atomic_energies:
-                e0 = torch.scalar_tensor(0.0, dtype=torch.float64)
+                e0 = torch.scalar_tensor(0.0, dtype=torch.float64, device=self.device)
                 for i in range(len(atomic_numbers)):
                     Z = int(atomic_numbers[i])
                     e0 += self.atomic_energies.get(Z, 0.0)
             else:
-                e0 = torch.scalar_tensor(0.0)
+                e0 = torch.scalar_tensor(0.0, device=self.device)
             
             # Extract energy
             energy: Tensor = prediction['CACE_energy'] + e0  # Modify to match the model's output key
@@ -113,9 +117,9 @@ class MetatensorWrapper(nn.Module):
             samples_list.append(system_index)
 
         # Stack the energy tensors
-        energies: Tensor = torch.cat(energies_list, dim=0)  # Shape: (num_systems, 1)
+        energies: Tensor = torch.cat(energies_list, dim=0).to(self.device)  # Shape: (num_systems, 1)
         # Create sample labels
-        samples_values = torch.tensor(samples_list, dtype=torch.int64).unsqueeze(1)
+        samples_values = torch.tensor(samples_list, dtype=torch.int64).unsqueeze(1).to(self.device)
         samples = Labels(
             names=["system"],
             values=samples_values
@@ -123,7 +127,7 @@ class MetatensorWrapper(nn.Module):
         # Create property labels (including CACE_energy)
         properties = Labels(
             names=["CACE_energy"],  # Add energy name
-            values=torch.tensor([[0]], dtype=torch.int64)  # Single property index
+            values=torch.tensor([[0]], dtype=torch.int64).to(self.device)  # Single property index
         )
         # Create a TensorBlock
         energy_block = TensorBlock(
@@ -135,7 +139,7 @@ class MetatensorWrapper(nn.Module):
         # Create key labels
         keys = Labels(
             names=["_"],  # Use a key name indicated by metatensor document
-            values=torch.tensor([[0]], dtype=torch.int64)  # [1, 1]
+            values=torch.tensor([[0]], dtype=torch.int64).to(self.device)  # [1, 1]
         )
         # Create a TensorMap
         energy_tensormap = TensorMap(
