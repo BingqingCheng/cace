@@ -1,4 +1,6 @@
 import os
+import glob
+import logging
 import torch
 import torch.nn as nn
 import lightning as L
@@ -44,9 +46,10 @@ def default_metrics(e_name="energy",f_name="force"):
 class LightningModel(L.LightningModule):
     def __init__(self,
                  model : nn.Module,
+                 model_directory : str,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 log_rmse : bool = True,
+                 metric_typ : str = "rmse",
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
@@ -58,14 +61,15 @@ class LightningModel(L.LightningModule):
         self.model = model
         self.losses = losses
         self.metrics = metrics
-        self.log_rmse = log_rmse
+        self.metric_typ = metric_typ
         self.optimizer_args = optimizer_args
         self.train_args = train_args
         self.val_args = val_args
         self.lr_scheduler = lr_scheduler
         self.scheduler_args = scheduler_args
         self.lr_scheduler_config = lr_scheduler_config
-
+        self.train_dct = {}
+        
     def forward(self,
                 data: Dict[str, torch.Tensor],
                 kwargs = None, #dict
@@ -93,13 +97,10 @@ class LightningModel(L.LightningModule):
                 results : Dict[str, torch.Tensor],
                 ) -> Tuple[Dict[int, torch.Tensor], str]:
         dct = {}
-        typ = "rmse"
-        if not self.log_rmse:
-            typ = "mae"
         for metric in self.metrics:
             name = metric.name
-            dct[name] = metric(results,data)[typ]
-        return dct, typ
+            dct[name] = metric(results,data)[self.metric_typ]
+        return dct
 
     def training_step(self,
                       data : Dict[int, torch.Tensor],
@@ -111,9 +112,10 @@ class LightningModel(L.LightningModule):
         #Calc metrics
         if log_metrics:
             batch_size = data.batch.max() + 1
-            dct, typ = self.calculate_metrics(data,results)
+            dct = self.calculate_metrics(data,results)
             for k,v in dct.items():
-                self.log(f"train_{k}_{typ}",v,batch_size=batch_size)
+                self.log(f"train_{k}_{self.metric_typ}",v,batch_size=batch_size)
+                self.train_dct[k] = v
         return loss
     
     def configure_optimizers(self):
@@ -123,7 +125,7 @@ class LightningModel(L.LightningModule):
         lr_scheduler_config["scheduler"] = lr_scheduler
         opt_info = {"optimizer": optimizer,"lr_scheduler": lr_scheduler_config}
         return opt_info
-
+        
     def validation_step(self,
                       data : Dict[int, torch.Tensor],
                       val_idx : int) -> None:
@@ -141,40 +143,117 @@ class LightningModel(L.LightningModule):
         self.log(f"val_loss",tot_loss,batch_size=batch_size)
 
         #Log metrics
-        dct, typ = self.calculate_metrics(data,results)
+        dct = self.calculate_metrics(data,results)
         for k,v in dct.items():
-            self.log(f"val_{k}_{typ}",v,batch_size=batch_size)
+            self.log(f"val_{k}_{self.metric_typ}",v,batch_size=batch_size)
+
+from lightning.pytorch.callbacks import Callback
+from datetime import datetime
+class TextCallback(Callback):
+    """PyTorch Lightning metric callback."""
+
+    def __init__(self,log_fn,val_model_path):
+        super().__init__()
+        self.log_fn = log_fn
+        self.val_model_path = val_model_path
+        self.state = {"best_val_loss":10000}
+
+    def log_info(self,s):
+        now = datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        with open(self.log_fn,"a") as f:
+            f.write(f"{dt_string} {s}\n")
+            
+    @property
+    def state_key(self) -> str:
+        return "TextCallback"
+
+    def load_state_dict(self, state_dict):
+        self.state.update(state_dict)
+
+    def state_dict(self):
+        return self.state.copy()
+
+    def on_train_start(self, trainer, pl_module):
+        self.log_info("Training is starting...")
+
+    def on_train_end(self, trainer, pl_module):
+        self.log_info("Training has finished.")
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if trainer.sanity_checking:
+            return None
+        epoch = trainer.current_epoch
+        
+        val_loss = trainer.callback_metrics["val_loss"]
+        self.log_info(f"Epoch {epoch} val_loss: {val_loss:.4f}")
+        if val_loss < self.state["best_val_loss"]:
+            self.log_info(f"Best validation loss achieved, saving state_dict of model to {self.val_model_path}...")
+            state_dict = pl_module.state_dict()
+            torch.save({"state_dict":state_dict}, self.val_model_path)
+            self.state["best_val_loss"] = val_loss
+
+        #Log training
+        for k,v in pl_module.train_dct.items():
+            self.log_info(f"Epoch {epoch} train_{k}: {v:.4f}")
+        
+        #Log validation
+        for k,v in trainer.callback_metrics.items():
+            if k == "val_loss":
+                continue
+            self.log_info(f"Epoch {epoch} {k}: {v:.4f}")
 
 class LightningTrainingTask():
     def __init__(self,
                  model : nn.Module,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 log_rmse : bool = True,
+                 metric_typ : str = "rmse",
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
                  lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
                  scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
-                 lr_frequency = 1
+                 lr_frequency = 1,
+                 logs_directory = "lightning_logs",
+                 name = None,
+                 text_logging = True
                 ) -> None:
         lr_scheduler_config = {"interval": "epoch","frequency": lr_frequency,"monitor": "val_loss","strict": True}
-        self.model = LightningModel(model,
+        self.callbacks = [LearningRateMonitor(logging_interval='step')]
+        self.logs_directory = logs_directory
+        
+        #Text callbacks
+        if text_logging:
+            if name is None:
+                i = 0
+                while os.path.isdir(f"{logs_directory}/version_{i}"):
+                    i += 1
+                name = f"version_{i}"
+            self.name = name
+            model_directory = f"{logs_directory}/{name}"
+            if not os.path.isdir(model_directory):
+                os.system(f"mkdir -p {model_directory}")
+            log_fn = f"{model_directory}/metrics.log"
+            val_model_path = f"{model_directory}/best_model.pth"
+            self.callbacks.append(TextCallback(log_fn,val_model_path))
+        
+        self.model = LightningModel(model, model_directory,
                                     losses = losses,
                                     metrics = metrics,
-                                    log_rmse = log_rmse,
+                                    metric_typ = metric_typ,
                                     optimizer_args = optimizer_args,
                                     train_args = train_args,
                                     val_args = val_args,
                                     lr_scheduler = lr_scheduler,
                                     scheduler_args = scheduler_args,
-                                    lr_scheduler_config = lr_scheduler_config
+                                    lr_scheduler_config = lr_scheduler_config,
         )
 
     def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,check_val_every_n_epoch=1,
-            gradient_clip_val=10,accelerator="auto",name=None,progress_bar=True):
+            gradient_clip_val=10,accelerator="auto",progress_bar=True):
         from lightning.pytorch.loggers import TensorBoardLogger
-        logger = TensorBoardLogger("lightning_logs",name=name)
+        logger = TensorBoardLogger(self.logs_directory,name=self.name)
         if (max_steps is None) and (max_epochs is None):
             print("Please input max_steps or max_epochs")
             return None
@@ -183,13 +262,12 @@ class LightningTrainingTask():
             return None
         if chkpt is not None:
             self.load(chkpt)
-        lr_monitor = LearningRateMonitor(logging_interval='step') #to log the lr
         if max_epochs:
             trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
-                                gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
+                                gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         elif max_steps:
             trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
-                                gradient_clip_val=gradient_clip_val,callbacks=[lr_monitor],logger=logger,accelerator=accelerator)
+                                gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
     def save(self,path):
@@ -242,6 +320,7 @@ class LightningData(L.LightningDataModule):
                 AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
                 for atoms in collection.train
             ]
+        
         self.valid_dataset = [
                 AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
                 for atoms in collection.valid
