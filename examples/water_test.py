@@ -137,6 +137,8 @@ task = LightningTrainingTask(model,losses=losses,metrics=metrics,
 task.fit(data,dev_run=dev_run,max_epochs=training_epochs,chkpt=chkpt, progress_bar=progress_bar)
 
 #If you want to do the "fine-tuning" w/higher energy loss:
+#Keep in mind this does *not* reset the learning rate
+#If you want to refresh the learning rate, use task.load() on the chkpt directly and do not pass it to the trainer
 if tuning_epochs > 0:
     e_loss = GetLoss(
         target_name="energy",
@@ -159,6 +161,7 @@ if tuning_epochs > 0:
                                  scheduler_args={'mode': 'min', 'factor': 0.8, 'patience': 10},
                                  optimizer_args={'lr': 0.01},
                                 )
+    #task.load(chkpt) #and then remove chkpt from below to reset lr
     task.fit(data,dev_run=dev_run,max_epochs=training_epochs+tuning_epochs,
              chkpt=chkpt, progress_bar=progress_bar)
 
