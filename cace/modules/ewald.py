@@ -73,8 +73,14 @@ class EwaldPotential(nn.Module):
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
-            pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
-            #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
+            if box_now[0] == 0 and box_now[1] == 0 and box_now[2] == 0 and self.exponent == 1:
+                # the box is not periodic, we use the direct sum
+                pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
+            elif box_now[0] > 0 and box_now[1] > 0 and box_now[2] > 0:
+                pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
+                #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
+            else:
+                raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
 
             if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
                 # if self.external_field_direction is an integer, then external_field_direction is the direction index
@@ -105,6 +111,42 @@ class EwaldPotential(nn.Module):
         if self.compute_field:
             data[self.feature_key+'_field'] = torch.cat(field_results, dim=0)
         return data
+
+    def compute_potential_realspace(self, r_raw, q, compute_field=False):
+        # Compute pairwise distances (norm of vector differences)
+        r_ij = r_raw.unsqueeze(0) - r_raw.unsqueeze(1)
+        r_ij_norm = torch.norm(r_ij, dim=-1)
+        #print(r_ij_norm)
+    
+        # Error function scaling for long-range interactions
+        convergence_func_ij = torch.special.erf(r_ij_norm / self.sigma / (2.0 ** 0.5))
+        #print(convergence_func_ij)
+   
+        # Compute inverse distance safely
+        # [n_node, n_node]
+        r_p_ij = torch.where(r_ij_norm > 1e-6, 1.0 / r_ij_norm, 0.0)
+
+        if q.dim() == 1:
+            # [n_node, n_q]
+            q = q.unsqueeze(1)
+    
+        # Compute potential energy
+        # [1, n_node, n_q] * [n_node, 1, n_q] * [n_node, n_node, 1] * [n_node, n_node, 1]
+        pot = torch.tensor(torch.sum(q.unsqueeze(0) * q.unsqueeze(1) * r_p_ij.unsqueeze(2) * convergence_func_ij.unsqueeze(2))).reshape(1) / self.twopi / 2.0
+    
+        q_field = torch.zeros_like(q, dtype=q.dtype, device=q.device) # Field due to q
+        # Compute field if requested
+        if compute_field:
+            # [n_node, 1 , n_q] * [n_node, n_node, 1] * [n_node, n_node, 1]
+            q_field = torch.sum(q.unsqueeze(1) * r_p_ij.unsqueeze(2) * convergence_func_ij.unsqueeze(2), dim=0) / self.twopi
+
+        # because this realspace sum already removed self-interaction, we need to add it back if needed
+        if self.remove_self_interaction == False and self.exponent == 1:
+            pot += torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
+            q_field = q_field + q / (self.sigma * self.twopi**(3./2.)) * 2.
+    
+        return pot * self.norm_factor, q_field * self.norm_factor
+ 
 
     def compute_potential(self, r_raw, q, box, compute_field=False):
         """ Compute the Ewald long-range potential for one configuration """
@@ -145,8 +187,6 @@ class EwaldPotential(nn.Module):
 
         pot_list = []
         q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device) # Field due to q
-        #q_field = torch.zeros_like(q, dtype=dtype, device=device) # Field due to q
-
         
         for kx in range(nk[0] + 1):
             # for negative kx, the Fourier transform is just the complex conjugate of the positive kx
@@ -173,10 +213,11 @@ class EwaldPotential(nn.Module):
         pot = torch.stack(pot_list).sum(axis=0) / volume
         if compute_field:
             q_field /= volume
-        #print(pot, torch.sum(q * q_field, dim=0)) should be the same
+        #print(pot, torch.sum(q * q_field, dim=0) /2) #should be the same
 
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
+            q_field = q_field - q / (self.sigma * self.twopi**(3./2.)) * 2.
 
         return pot.real * self.norm_factor, q_field * self.norm_factor
 
@@ -275,6 +316,7 @@ class EwaldPotential(nn.Module):
 
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
+            q_field = q_field - q / (self.sigma * self.twopi**(3./2.)) * 2.
 
         return pot.real * self.norm_factor, q_field * self.norm_factor
 
