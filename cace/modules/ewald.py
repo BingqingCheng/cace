@@ -10,6 +10,7 @@ class EwaldPotential(nn.Module):
                  exponent=1, # default is for electrostattics with p=1, we can do London dispersion with p=6
                  external_field = None, # external field
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z
+                 charge_neutral_lambda: float = None,
                  remove_self_interaction=False,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
@@ -40,6 +41,8 @@ class EwaldPotential(nn.Module):
         self.compute_field = compute_field
         if self.compute_field:
             self.model_outputs.append(feature_key+'_field')
+
+        self.charge_neutral_lambda = charge_neutral_lambda
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
@@ -104,7 +107,14 @@ class EwaldPotential(nn.Module):
             else:
                 pot_ext = 0.0
 
-            results.append(pot + pot_ext)
+            if hasattr(self, 'charge_neutral_lambda') and self.charge_neutral_lambda is not None:
+                q_mean = torch.mean(q[mask])
+                pot_neutral = self.charge_neutral_lambda * (q_mean)**2.
+                #print(pot_neutral, pot)
+            else:
+                pot_neutral = 0.0
+
+            results.append(pot + pot_ext + pot_neutral)
             field_results.append(field)
 
         data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
