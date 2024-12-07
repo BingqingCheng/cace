@@ -37,11 +37,6 @@ class MetatensorWrapper(nn.Module):
                 cutoff=self.cutoff,       # cutoff radius
                 full_list=True,   # full neighbor list
                 strict=True,      # strict neighbor list
-            ),            
-            NeighborListOptions(
-                cutoff=self.cutoff,       # cutoff radius
-                full_list=False,   # half neighbor list
-                strict=True,      # strict neighbor list
             )]
     
     def forward(
@@ -114,7 +109,7 @@ class MetatensorWrapper(nn.Module):
             dtype= prediction[self.energy_key].dtype
 
             if self.atomic_energies:
-                e0 = torch.scalar_tensor(0.0, dtype=dtype, device=device)
+                e0 = torch.scalar_tensor(0.0, dtype=torch.float64, device=device)
                 for i in range(len(atomic_numbers)):
                     Z = int(atomic_numbers[i])
                     e0 += torch.scalar_tensor(self.atomic_energies.get(Z, 0.0), dtype=dtype, device=device)
