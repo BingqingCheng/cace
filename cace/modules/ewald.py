@@ -76,7 +76,7 @@ class EwaldPotential(nn.Module):
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
-            if box_now[0] == 0 and box_now[1] == 0 and box_now[2] == 0 and self.exponent == 1:
+            if box_now[0] < 1e-6 and box_now[1] < 1e-6 and box_now[2] < 1e-6 and self.exponent == 1:
                 # the box is not periodic, we use the direct sum
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
             elif box_now[0] > 0 and box_now[1] > 0 and box_now[2] > 0:
@@ -127,22 +127,29 @@ class EwaldPotential(nn.Module):
         r_ij = r_raw.unsqueeze(0) - r_raw.unsqueeze(1)
         r_ij_norm = torch.norm(r_ij, dim=-1)
         #print(r_ij_norm)
-    
+ 
         # Error function scaling for long-range interactions
         convergence_func_ij = torch.special.erf(r_ij_norm / self.sigma / (2.0 ** 0.5))
         #print(convergence_func_ij)
    
         # Compute inverse distance safely
         # [n_node, n_node]
-        r_p_ij = torch.where(r_ij_norm > 1e-6, 1.0 / r_ij_norm, 0.0)
+        #r_p_ij = torch.where(r_ij_norm > 1e-3, 1.0 / r_ij_norm, 0.0) # this causes gradient issues
+        epsilon = 1e-6
+        r_p_ij = 1.0 / (r_ij_norm + epsilon)
 
         if q.dim() == 1:
             # [n_node, n_q]
             q = q.unsqueeze(1)
     
         # Compute potential energy
+        n_node, n_q = q.shape
+        # Use broadcasting to set diagonal elements to 0
+        #mask = torch.ones(n_node, n_node, n_q, dtype=torch.int64, device=q.device)
+        #diag_indices = torch.arange(n_node)
+        #mask[diag_indices, diag_indices, :] = 0
         # [1, n_node, n_q] * [n_node, 1, n_q] * [n_node, n_node, 1] * [n_node, n_node, 1]
-        pot = torch.tensor(torch.sum(q.unsqueeze(0) * q.unsqueeze(1) * r_p_ij.unsqueeze(2) * convergence_func_ij.unsqueeze(2))).reshape(1) / self.twopi / 2.0
+        pot = torch.sum(q.unsqueeze(0) * q.unsqueeze(1) * r_p_ij.unsqueeze(2) * convergence_func_ij.unsqueeze(2)).view(-1) / self.twopi / 2.0
     
         q_field = torch.zeros_like(q, dtype=q.dtype, device=q.device) # Field due to q
         # Compute field if requested
