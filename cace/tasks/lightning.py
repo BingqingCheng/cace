@@ -186,7 +186,7 @@ class TextCallback(Callback):
         epoch = trainer.current_epoch
         
         val_loss = trainer.callback_metrics["val_loss"]
-        self.log_info(f"Epoch {epoch} val_loss: {val_loss:.4f}")
+        self.log_info(f"Epoch {epoch} val_loss: {val_loss:.8f}")
         if val_loss < self.state["best_val_loss"]:
             self.log_info(f"Best validation loss achieved, saving state_dict of model to {self.val_model_path}...")
             state_dict = pl_module.state_dict()
@@ -195,13 +195,13 @@ class TextCallback(Callback):
 
         #Log training
         for k,v in pl_module.train_dct.items():
-            self.log_info(f"Epoch {epoch} train_{k}: {v:.4f}")
+            self.log_info(f"Epoch {epoch} train_{k}: {v:.8f}")
         
         #Log validation
         for k,v in trainer.callback_metrics.items():
             if k == "val_loss":
                 continue
-            self.log_info(f"Epoch {epoch} {k}: {v:.4f}")
+            self.log_info(f"Epoch {epoch} {k}: {v:.8f}")
 
 class LightningTrainingTask():
     def __init__(self,
