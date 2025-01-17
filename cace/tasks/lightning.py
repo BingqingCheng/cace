@@ -152,10 +152,11 @@ from datetime import datetime
 class TextCallback(Callback):
     """PyTorch Lightning metric callback."""
 
-    def __init__(self,log_fn,val_model_path):
+    def __init__(self,log_fn,val_model_path,save_pkl):
         super().__init__()
         self.log_fn = log_fn
         self.val_model_path = val_model_path
+        self.save_pkl = save_pkl
         self.state = {"best_val_loss":10000}
 
     def log_info(self,s):
@@ -186,22 +187,24 @@ class TextCallback(Callback):
         epoch = trainer.current_epoch
         
         val_loss = trainer.callback_metrics["val_loss"]
-        self.log_info(f"Epoch {epoch} val_loss: {val_loss:.4f}")
+        self.log_info(f"Epoch {epoch} val_loss: {val_loss:.8f}")
         if val_loss < self.state["best_val_loss"]:
-            self.log_info(f"Best validation loss achieved, saving state_dict of model to {self.val_model_path}...")
-            state_dict = pl_module.state_dict()
-            torch.save({"state_dict":state_dict}, self.val_model_path)
+            if not self.save_pkl:
+                self.log_info(f"Best validation loss achieved, saving state_dict of model to {self.val_model_path}...")
+                torch.save(pl_module.model.state_dict(), self.val_model_path)
+            else:
+                torch.save(pl_module.model,self.val_model_path)
             self.state["best_val_loss"] = val_loss
 
         #Log training
         for k,v in pl_module.train_dct.items():
-            self.log_info(f"Epoch {epoch} train_{k}: {v:.4f}")
+            self.log_info(f"Epoch {epoch} train_{k}: {v:.8f}")
         
         #Log validation
         for k,v in trainer.callback_metrics.items():
             if k == "val_loss":
                 continue
-            self.log_info(f"Epoch {epoch} {k}: {v:.4f}")
+            self.log_info(f"Epoch {epoch} {k}: {v:.8f}")
 
 class LightningTrainingTask():
     def __init__(self,
@@ -217,11 +220,14 @@ class LightningTrainingTask():
                  lr_frequency = 1,
                  logs_directory = "lightning_logs",
                  name = None,
-                 text_logging = True
+                 text_logging = True,
+                 save_pkl = False,
                 ) -> None:
         lr_scheduler_config = {"interval": "epoch","frequency": lr_frequency,"monitor": "val_loss","strict": True}
         self.callbacks = [LearningRateMonitor(logging_interval='step')]
         self.logs_directory = logs_directory
+        self.text_logging = text_logging
+        self.save_pkl = save_pkl
         
         #Text callbacks
         if text_logging:
@@ -232,11 +238,16 @@ class LightningTrainingTask():
                 name = f"version_{i}"
             self.name = name
             model_directory = f"{logs_directory}/{name}"
+            self.model_directory = model_directory
             if not os.path.isdir(model_directory):
                 os.system(f"mkdir -p {model_directory}")
             log_fn = f"{model_directory}/metrics.log"
-            val_model_path = f"{model_directory}/best_model.pth"
-            self.callbacks.append(TextCallback(log_fn,val_model_path))
+            if self.save_pkl:
+                val_model_path = f"{model_directory}/best_model.pth"
+            else:
+                val_model_path = f"{model_directory}/best_model_state.pth"
+            self.val_model_path = val_model_path
+            self.callbacks.append(TextCallback(log_fn,val_model_path,save_pkl))
         
         self.model = LightningModel(model, model_directory,
                                     losses = losses,
@@ -270,16 +281,25 @@ class LightningTrainingTask():
                                 gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         trainer.fit(self.model,data,ckpt_path=chkpt)
 
+        #Save final model at end of training
+        if not self.save_pkl:
+            torch.save(self.model.model.state_dict(), f"{self.model_directory}/final_model_state.pth")
+        else:
+            torch.save(self.model.model, f"{self.model_directory}/final_model.pth")
+
     def save(self,path):
         print("Saving model to",path,"...")
         state_dict = self.model.state_dict()
         torch.save({"state_dict":state_dict}, path)
 
     def load(self,path):
+        #Load from a tensorboard chkpt
         print("Loading model from",path,"...")
         state_dict = torch.load(path, weights_only=True)
-        self.epoch = state_dict["epoch"]
-        self.global_step = state_dict["global_step"]
+        if "epoch" in state_dict.keys():
+            self.epoch = state_dict["epoch"]
+        if "global_step" in state_dict.keys():
+            self.global_step = state_dict["global_step"]
         self.model.load_state_dict(state_dict["state_dict"])
         print("Loading successful!")
 
