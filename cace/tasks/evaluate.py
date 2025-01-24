@@ -183,11 +183,9 @@ class EvaluateTask(nn.Module):
                     if len(energies_list) >= 1:
                         atoms.info[self.energy_key] = energies_list[i][0] * self.energy_units_to_eV
                     if len(forces_list) >= 1:
-                        print(forces_list[i].shape)
                         atoms.set_array(self.forces_key, forces_list[i] * self.energy_units_to_eV / self.length_units_to_A)
                     for key in self.other_keys:
                         output_now = other_outputs[key][i]
-                        print(output_now.shape)
                         if output_now.ndim > 2:
                             output_now = output_now.reshape(output_now.shape[0], -1)
                         atoms.set_array(key, output_now)
