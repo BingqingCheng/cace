@@ -49,7 +49,6 @@ class LightningModel(L.LightningModule):
                  model_directory : str,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 metric_typ : str = "rmse",
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
@@ -61,7 +60,6 @@ class LightningModel(L.LightningModule):
         self.model = model
         self.losses = losses
         self.metrics = metrics
-        self.metric_typ = metric_typ
         self.optimizer_args = optimizer_args
         self.train_args = train_args
         self.val_args = val_args
@@ -99,7 +97,8 @@ class LightningModel(L.LightningModule):
         dct = {}
         for metric in self.metrics:
             name = metric.name
-            dct[name] = metric(results,data)[self.metric_typ]
+            for k,v in metric(results,data).items():
+                dct[f"{name}_{k}"] = v
         return dct
 
     def training_step(self,
@@ -114,7 +113,7 @@ class LightningModel(L.LightningModule):
             batch_size = data.batch.max() + 1
             dct = self.calculate_metrics(data,results)
             for k,v in dct.items():
-                self.log(f"train_{k}_{self.metric_typ}",v,batch_size=batch_size)
+                self.log(f"train_{k}",v,batch_size=batch_size)
                 self.train_dct[k] = v
         return loss
     
@@ -145,7 +144,7 @@ class LightningModel(L.LightningModule):
         #Log metrics
         dct = self.calculate_metrics(data,results)
         for k,v in dct.items():
-            self.log(f"val_{k}_{self.metric_typ}",v,batch_size=batch_size)
+            self.log(f"val_{k}",v,batch_size=batch_size)
 
 from lightning.pytorch.callbacks import Callback
 from datetime import datetime
@@ -211,7 +210,6 @@ class LightningTrainingTask():
                  model : nn.Module,
                  losses : List[nn.Module] = None,
                  metrics : List[nn.Module] = None,
-                 metric_typ : str = "rmse",
                  optimizer_args = {'lr': 1e-2},
                  train_args = {"training":True},
                  val_args = {"training":False},
@@ -252,7 +250,6 @@ class LightningTrainingTask():
         self.model = LightningModel(model, model_directory,
                                     losses = losses,
                                     metrics = metrics,
-                                    metric_typ = metric_typ,
                                     optimizer_args = optimizer_args,
                                     train_args = train_args,
                                     val_args = val_args,
