@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 
 from ..modules import Transform
+from ..modules import Preprocess
 from ..tools import torch_geometric
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
@@ -120,6 +121,9 @@ class NeuralNetworkPotential(AtomisticModel):
             do_postprocessing=do_postprocessing,
         )
         self.representation = representation
+        if input_modules is None:
+            preprocessor = Preprocess()
+            input_modules = [preprocessor]
         self.input_modules = nn.ModuleList(input_modules)
         self.output_modules = nn.ModuleList(output_modules)
 
@@ -129,7 +133,7 @@ class NeuralNetworkPotential(AtomisticModel):
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
                 training: bool = False, 
-                compute_stress: bool = False, 
+                compute_stress: bool = True, 
                 compute_virials: bool = False,
                 output_index: int = None, # only used for multiple-head output
                 ) -> Dict[str, torch.Tensor]:

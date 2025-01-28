@@ -15,7 +15,7 @@ class Forces(nn.Module):
     def __init__(
         self,
         calc_forces: bool = True,
-        calc_stress: bool = False,
+        calc_stress: bool = True,
         #calc_virials: bool = False,
         energy_key: str = 'energy',
         forces_key: str = 'forces',
