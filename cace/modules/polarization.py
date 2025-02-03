@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Dict
 
-__all__ = ['Polarization', 'Dephase']
+__all__ = ['Polarization', 'Dephase', 'FixedCharge']
 
 class Polarization(nn.Module):
     def __init__(self,
@@ -81,4 +81,26 @@ class Dephase(nn.Module):
     def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
         result = data[self.input_key] * data[self.phase_key].unsqueeze(-2).conj()
         data[self.output_key] = result.real
+        return data
+
+class FixedCharge(nn.Module):
+    def __init__(self,
+                 atomic_numbers_key: str = 'atomic_numbers',
+                 output_key: str = 'q',
+                 charge_dict: Dict[int, float] = None,
+                 normalize: bool = True,
+                 ):
+        super().__init__()
+        self.charge_dict = charge_dict
+        self.atomic_numbers_key = atomic_numbers_key
+        self.output_key = output_key
+        self.normalize = normalize
+        self.normalization_factor = 9.48933 
+    
+    def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
+        atomic_numbers = data[self.atomic_numbers_key]
+        charge = torch.tensor([self.charge_dict[atomic_number.item()] for atomic_number in atomic_numbers], device=atomic_numbers.device)
+        if self.normalize:
+            charge = charge * self.normalization_factor # to be consistent with the internal units and the Ewald sum
+        data['q'] = charge
         return data
