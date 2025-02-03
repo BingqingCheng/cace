@@ -89,17 +89,29 @@ class FixedCharge(nn.Module):
                  output_key: str = 'q',
                  charge_dict: Dict[int, float] = None,
                  normalize: bool = True,
+                 trainable: bool = False,
                  ):
         super().__init__()
-        self.charge_dict = charge_dict
         self.atomic_numbers_key = atomic_numbers_key
         self.output_key = output_key
         self.normalize = normalize
         self.normalization_factor = 9.48933 
+        self.elements = [ key for key in charge_dict.keys()]
+        element_charges = torch.tensor([charge_dict[key] for key in charge_dict.keys()], dtype=torch.float32)
+        if trainable:
+            self.element_charges = nn.Parameter(element_charges)
+        else:
+            self.register_buffer("element_charges", element_charges)
     
+    def get_charge_dict(self):
+        return {element: self.element_charges[i] for i, element in enumerate(self.elements)}
+
     def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
         atomic_numbers = data[self.atomic_numbers_key]
-        charge = torch.tensor([self.charge_dict[atomic_number.item()] for atomic_number in atomic_numbers], device=atomic_numbers.device)
+        charge = torch.zeros(atomic_numbers.shape[0], device=atomic_numbers.device)
+        for i, element in enumerate(self.elements):
+            mask = atomic_numbers == element
+            charge[mask] = self.element_charges[i]
         if self.normalize:
             charge = charge * self.normalization_factor # to be consistent with the internal units and the Ewald sum
         data['q'] = charge
