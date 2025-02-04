@@ -96,10 +96,9 @@ class NeuralNetworkPotential(AtomisticModel):
 
     def __init__(
         self,
-        representation: nn.Module,
+        representation: nn.Module = None,
         input_modules: List[nn.Module] = None,
         output_modules: List[nn.Module] = None,
-        #input_dtype_str: str = "float32",
         postprocessors: Optional[List[Transform]] = None,
         do_postprocessing: bool = False,
     ):
@@ -116,7 +115,6 @@ class NeuralNetworkPotential(AtomisticModel):
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__(
-            #input_dtype_str=input_dtype_str,
             postprocessors=postprocessors,
             do_postprocessing=do_postprocessing,
         )
@@ -145,7 +143,8 @@ class NeuralNetworkPotential(AtomisticModel):
         for m in self.input_modules:
             data = m(data, compute_stress=compute_stress, compute_virials=compute_virials)
 
-        data = self.representation(data)
+        if self.representation is not None:
+            data = self.representation(data)
 
         for m in self.output_modules:
             data = m(data, training=training, output_index=output_index)
