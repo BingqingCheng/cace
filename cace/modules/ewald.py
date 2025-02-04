@@ -79,8 +79,6 @@ class EwaldPotential(nn.Module):
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
             box_diag = box[i].diagonal(dim1=-2, dim2=-1)
-            print(box_now)
-            print(box_now.shape)
             if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
                 # the box is not periodic, we use the direct sum
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
