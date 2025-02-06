@@ -123,20 +123,16 @@ class EwaldPotential(nn.Module):
         return data
 
     def compute_potential_realspace(self, r_raw, q, compute_field=False):
-        # Compute pairwise distances (norm of vector differences)
-        r_ij = r_raw.unsqueeze(0) - r_raw.unsqueeze(1)
+        # Compute pairwise distances safely
+        epsilon = 1e-6
+        r_ij = r_raw.unsqueeze(0) - r_raw.unsqueeze(1) + epsilon
         r_ij_norm = torch.norm(r_ij, dim=-1)
-        #print(r_ij_norm)
  
         # Error function scaling for long-range interactions
         convergence_func_ij = torch.special.erf(r_ij_norm / self.sigma / (2.0 ** 0.5))
-        #print(convergence_func_ij)
    
-        # Compute inverse distance safely
-        # [n_node, n_node]
-        #r_p_ij = torch.where(r_ij_norm > 1e-3, 1.0 / r_ij_norm, 0.0) # this causes gradient issues
-        epsilon = 1e-6
-        r_p_ij = 1.0 / (r_ij_norm + epsilon)
+        # Compute inverse distance
+        r_p_ij = 1.0 / r_ij_norm
 
         if q.dim() == 1:
             # [n_node, n_q]
