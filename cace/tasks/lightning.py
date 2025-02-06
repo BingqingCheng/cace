@@ -297,7 +297,10 @@ class LightningTrainingTask():
             self.epoch = state_dict["epoch"]
         if "global_step" in state_dict.keys():
             self.global_step = state_dict["global_step"]
-        self.model.load_state_dict(state_dict["state_dict"])
+        if "state_dict" in state_dict.keys():
+            self.model.load_state_dict(state_dict["state_dict"])
+        else:
+            self.model.load_state_dict(state_dict)
         print("Loading successful!")
 
 #Data
