@@ -426,5 +426,6 @@ class EwaldPotential(nn.Module):
         self.external_field = external_field
 
     def is_orthorhombic(self, cell_matrix):
-        is_orthorhombic = np.allclose(cell_matrix - np.diag(np.diagonal(cell_matrix)), 0)
+        diag_matrix = torch.diag(torch.diagonal(cell_matrix))
+        is_orthorhombic = torch.allclose(cell_matrix, diag_matrix, atol=1e-6)
         return is_orthorhombic
