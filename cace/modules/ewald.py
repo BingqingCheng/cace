@@ -344,7 +344,7 @@ class EwaldPotential(nn.Module):
         return pot.real * self.norm_factor, q_field * self.norm_factor
     
     # Triclinic box(could be orthorhombic)
-    def compute_potential_tricilinic(self, r_raw, q, cell_now, compute_field=False):
+    def compute_potential_tricilinic_old(self, r_raw, q, cell_now, compute_field=False):
         device = r_raw.device
         # cell_now # [3,3] M
         volume = torch.det(cell_now)
@@ -429,3 +429,63 @@ class EwaldPotential(nn.Module):
         diag_matrix = torch.diag(torch.diagonal(cell_matrix))
         is_orthorhombic = torch.allclose(cell_matrix, diag_matrix, atol=1e-6)
         return is_orthorhombic
+    
+    def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field=False):
+        device = r_raw.device
+        dtype = torch.complex128 if r_raw.dtype == torch.float64 else torch.complex64
+        # Compute reciprocal lattice vectors and their norms
+        cell_inv = torch.linalg.inv(cell_now)
+        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3]
+        G_norms = torch.norm(G, dim=1)  # Norms of each G vector
+        # Determine Nk based on reciprocal lattice vectors and dl
+        k_max = 2 * torch.pi / self.dl
+        Nk = [max(1, int((k_max / gn).item())) for gn in G_norms]
+        # Generate n1, n2, n3 including negative indices
+        n1 = torch.arange(-Nk[0], Nk[0] + 1, device=device)
+        n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
+        n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
+        # Create nvec grid and compute k vectors
+        nvec = torch.stack(torch.meshgrid(n1, n2, n3, indexing="ij"), dim=-1).reshape(-1, 3)
+        kvec = (nvec.float() @ G).to(device)  # [M, 3]
+        # Apply k-space cutoff and filter
+        k_sq = torch.sum(kvec ** 2, dim=1)
+        mask = (k_sq > 0) & (k_sq <= self.k_sq_max)
+        kvec = kvec[mask]
+        k_sq = k_sq[mask]
+        nvec = nvec[mask]
+        # Determine symmetry factors (handle hemisphere to avoid double-counting)
+        # Lexicographical order: include nvec if first non-zero component is positive
+        non_zero = (nvec != 0).to(torch.int)
+        first_non_zero = torch.argmax(non_zero, dim=1)
+        sign = torch.gather(nvec, 1, first_non_zero.unsqueeze(1)).squeeze()
+        hemisphere_mask = (sign > 0) | ((nvec == 0).all(dim=1))
+        kvec = kvec[hemisphere_mask]
+        k_sq = k_sq[hemisphere_mask]
+        factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0)
+        # Compute structure factor S(k)
+        k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
+        exp_ikr = torch.exp(1j * k_dot_r)
+        S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
+        # Compute kfac
+        if self.exponent == 1:
+            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+        elif self.exponent == 6:
+            b_sq = k_sq * self.sigma_sq_half
+            b = torch.sqrt(b_sq)
+            kfac = -1.0 * k_sq**(3/2) * (
+                torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
+                (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
+            )
+        # Compute potential
+        volume = torch.det(cell_now)
+        pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
+        # Compute electric field if needed
+        q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
+        if compute_field:
+            sk_field = 2 * kfac * torch.conj(S_k)
+            q_field = (factors * (exp_ikr * sk_field).real).sum(dim=1) / volume
+        # Remove self-interaction if applicable
+        if self.remove_self_interaction and self.exponent == 1:
+            pot -= torch.sum(q**2) / (self.sigma * (2 * torch.pi)**1.5)
+            q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))
+        return pot.unsqueeze(0) * self.norm_factor, q_field.unsqueeze(1) * self.norm_factor
