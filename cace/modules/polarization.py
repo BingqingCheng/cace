@@ -60,9 +60,7 @@ class Polarization(nn.Module):
                 phase = torch.exp(1j * 2.* torch.pi * r_now / box_now)
                 polarization = torch.sum(q_now * phase, dim=(0)) * factor
                 if self.output_index is not None:
-                    #print(phase.shape)
                     phase = phase[:,self.output_index]
-                    #print(phase.shape)
                 phases.append(phase)
             if self.output_index is not None:
                 polarization = polarization[self.output_index]
