@@ -82,12 +82,11 @@ class EwaldPotential(nn.Module):
             if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
                 # the box is not periodic, we use the direct sum
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
-            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0 and self.is_orthorhombic(box_now):
-                box_now = box_now.diagonal(dim1=-2, dim2=-1)
-                pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
+            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
+                #box_now = box_now.diagonal(dim1=-2, dim2=-1)
                 #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
-            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0 and not self.is_orthorhombic(box_now):
-                pot, field = self.compute_potential_tricilinic(r_raw_now, q_now, box_now, self.compute_field)
+                #pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
+                pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
             else:
                 raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
 
@@ -108,7 +107,7 @@ class EwaldPotential(nn.Module):
                         external_field_now = data[self.external_field][i]
                     except:
                         raise ValueError("external_field must be a float or a key to the external field")
-
+                box_now = box_now.diagonal(dim1=-2, dim2=-1)
                 pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
             else:
                 pot_ext = 0.0
@@ -342,77 +341,6 @@ class EwaldPotential(nn.Module):
             q_field = q_field - q / (self.sigma * self.twopi**(3./2.)) * 2.
 
         return pot.real * self.norm_factor, q_field * self.norm_factor
-    
-    # Triclinic box(could be orthorhombic)
-    def compute_potential_tricilinic_old(self, r_raw, q, cell_now, compute_field=False):
-        device = r_raw.device
-        # cell_now # [3,3] M
-        volume = torch.det(cell_now)
-        # r_frac(s) = M⁻¹ r
-        r_frac = torch.linalg.solve(cell_now, r_raw.T).T
-        # Reciprocal lattice: G = 2π (M^{-1})^T
-        G = 2 * torch.pi * torch.linalg.inv(cell_now).T  # [3,3]
-
-        # max Nk for each axis
-        norms = torch.norm(cell_now, dim=1)
-        Nk = [max(1, int(n.item() / self.dl)) for n in norms]
-        # n1, n2, n3
-        n1 = torch.arange(0, Nk[0] + 1, device=device)
-        n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
-        n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
-        # nvec -> n1 ∈ [0, Nk[0]], n2 ∈ [–Nk[1], Nk[1]], n3 ∈ [–Nk[2], Nk[2]]
-        nvec = torch.stack(torch.meshgrid(n1, n2, n3, indexing="ij"), dim=-1).reshape(-1, 3)  # [N_total, 3]
-        nvec = nvec.to(G.dtype)
-
-        # kvec = G @ nvec
-        kvec = (G @ nvec.T).T  # [N_total, 3]
-        k_sq = torch.sum(kvec ** 2, dim=1) 
-        # mask for k_sq
-        mask = (k_sq > 0) & (k_sq <= self.k_sq_max) # k_sq_max = (2π/dl)^2, 
-        #M -> Masked size
-        kvec = kvec[mask]     # [M, 3]
-        k_sq = k_sq[mask]     # [M]
-        nvec_masked = nvec[mask]  # [M, 3]
-
-        # symmetry factor
-        factors = torch.ones(nvec_masked.shape[0], device=device, dtype=r_raw.dtype)
-        factors[nvec_masked[:, 0] > 0] = 2.0
-
-        #S(k) = Σ_i q_i e^{i k · r_i}
-        #exp(i k·r) = exp(i 2π n·s) (where s = M⁻¹ r). but here we use k·r
-        k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
-        S_k = torch.sum(q * torch.exp(1j * k_dot_r), dim=0)  # [M]
-
-        # kfac = exp(-σ^2/2 k^2) / k^2 for exponent = 1
-        if self.exponent == 1:
-            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq  # [M]
-        elif self.exponent == 6:
-            # Calculate b_sq and b
-            b_sq = k_sq * self.sigma_sq_half
-            b = torch.sqrt(b_sq)
-
-            # Compute kfac based on the provided expression
-            kfac = -1.0 * k_sq ** (3 / 2) * ( torch.pi ** 0.5 * torch.special.erfc(b) + (1 / (2 * b ** 3) - 1 / b) * torch.exp(-b_sq))
-            #kfac = -1.0 * k_sq ** (3 / 2) * torch.exp(-b_sq) # this assumed a Gaussian smearing
-        
-        # (2π/volume)* sum(factors * kfac * |S(k)|²)
-        # pot = (twopi / volume) * torch.sum( kfac * torch.abs(S_k)**2)
-        pot = (1 / volume) * torch.sum( factors * kfac * torch.abs(S_k)**2)
-
-        # return the field
-        q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device) # Field due to q
-        if compute_field:
-            sk_field = 2. * kfac * torch.conj(S_k)
-            exp_ikr = torch.exp(1j * k_dot_r)
-            q_field = (factors * torch.real(exp_ikr * sk_field)).sum(dim=1)
-            q_field /= volume
-        
-        remove_self_interaction = False    
-        if remove_self_interaction and self.exponent == 1:
-            pot -= torch.sum(q ** 2) / (self.sigma * self.twopi**(3./2.))
-            q_field = q_field - q / (self.sigma * self.twopi**(3./2.)) * 2.
-
-        return pot.unsqueeze(0) * self.norm_factor, q_field.unsqueeze(1) * self.norm_factor
 
     def add_external_field(self, r_raw, q, box, direction_index, external_field):
         external_field_norm_factor = (self.norm_factor/90.0474)**0.5
@@ -430,29 +358,41 @@ class EwaldPotential(nn.Module):
         is_orthorhombic = torch.allclose(cell_matrix, diag_matrix, atol=1e-6)
         return is_orthorhombic
     
+    # Triclinic box(could be orthorhombic)
     def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field=False):
         device = r_raw.device
-        dtype = torch.complex128 if r_raw.dtype == torch.float64 else torch.complex64
+
         # Compute reciprocal lattice vectors and their norms
+        # cell_now # [3,3] M
         cell_inv = torch.linalg.inv(cell_now)
-        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3]
-        G_norms = torch.norm(G, dim=1)  # Norms of each G vector
+        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3], G = 2π (M^{-1})^T
+
         # Determine Nk based on reciprocal lattice vectors and dl
-        k_max = 2 * torch.pi / self.dl
-        Nk = [max(1, int((k_max / gn).item())) for gn in G_norms]
+        #G_norms = torch.norm(G, dim=1)  # Norms of each G vector
+        #k_max = 2 * torch.pi / self.dl
+        # Nk = [max(1, int((k_max / gn).item())) for gn in G_norms]
+
+        # max Nk for each axis
+        norms = torch.norm(cell_now, dim=1)
+        Nk = [max(1, int(n.item() / self.dl)) for n in norms]
         # Generate n1, n2, n3 including negative indices
         n1 = torch.arange(-Nk[0], Nk[0] + 1, device=device)
         n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
         n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
+
         # Create nvec grid and compute k vectors
         nvec = torch.stack(torch.meshgrid(n1, n2, n3, indexing="ij"), dim=-1).reshape(-1, 3)
-        kvec = (nvec.float() @ G).to(device)  # [M, 3]
+        nvec = nvec.to(G.dtype)
+        # kvec = G @ nvec
+        kvec = (nvec.float() @ G).to(device)  # [N_total, 3]
+
         # Apply k-space cutoff and filter
         k_sq = torch.sum(kvec ** 2, dim=1)
         mask = (k_sq > 0) & (k_sq <= self.k_sq_max)
-        kvec = kvec[mask]
-        k_sq = k_sq[mask]
-        nvec = nvec[mask]
+        kvec = kvec[mask] # [M, 3]
+        k_sq = k_sq[mask] # [M]
+        nvec = nvec[mask] # [M, 3]
+
         # Determine symmetry factors (handle hemisphere to avoid double-counting)
         # Lexicographical order: include nvec if first non-zero component is positive
         non_zero = (nvec != 0).to(torch.int)
@@ -462,11 +402,16 @@ class EwaldPotential(nn.Module):
         kvec = kvec[hemisphere_mask]
         k_sq = k_sq[hemisphere_mask]
         factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0)
+
         # Compute structure factor S(k)
+        #S(k) = Σ_i q_i e^{i k · r_i}
+        #exp(i k·r) = exp(i 2π n·s) (where s = M⁻¹ r). but here we use k·r
         k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
         exp_ikr = torch.exp(1j * k_dot_r)
         S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
+
         # Compute kfac
+        # kfac = exp(-σ^2/2 k^2) / k^2 for exponent = 1
         if self.exponent == 1:
             kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
         elif self.exponent == 6:
@@ -476,16 +421,21 @@ class EwaldPotential(nn.Module):
                 torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
                 (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
             )
+        
+        # (2π/volume)* sum(factors * kfac * |S(k)|²)
         # Compute potential
         volume = torch.det(cell_now)
         pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
+        
         # Compute electric field if needed
         q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
         if compute_field:
             sk_field = 2 * kfac * torch.conj(S_k)
-            q_field = (factors * (exp_ikr * sk_field).real).sum(dim=1) / volume
+            q_field = (factors * torch.real(exp_ikr * sk_field)).sum(dim=1) / volume
+
         # Remove self-interaction if applicable
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q**2) / (self.sigma * (2 * torch.pi)**1.5)
             q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))
+
         return pot.unsqueeze(0) * self.norm_factor, q_field.unsqueeze(1) * self.norm_factor

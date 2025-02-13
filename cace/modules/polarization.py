@@ -63,7 +63,7 @@ class Polarization(nn.Module):
         if len(phases) > 0:
             data[self.phase_key] = torch.stack(phases, dim=0)
         else:
-            data[self.phase_key] = torch.zeros((1, *r_now.shape), dtype=torch.complex64, device=r_now.device)
+            data[self.phase_key] = 0.0
         return data
 
 class Dephase(nn.Module):
