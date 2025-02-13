@@ -8,6 +8,7 @@ class Polarization(nn.Module):
     def __init__(self,
                  charge_key: str = 'q',
                  output_key: str = 'polarization',
+                 output_index: int = None, # 0, 1, 2 to select only one component
                  phase_key: str = 'phase',
                  remove_mean: bool = True,
                  pbc: bool = False,
@@ -15,6 +16,7 @@ class Polarization(nn.Module):
         super().__init__()
         self.charge_key = charge_key
         self.output_key = output_key
+        self.output_index = output_index
         self.phase_key = phase_key
         self.model_outputs = [output_key, phase_key]
         self.remove_mean = remove_mean
@@ -57,11 +59,17 @@ class Polarization(nn.Module):
                 factor = box_now / (1j * 2.* torch.pi)
                 phase = torch.exp(1j * 2.* torch.pi * r_now / box_now)
                 polarization = torch.sum(q_now * phase, dim=(0)) * factor
+                if self.output_index is not None:
+                    #print(phase.shape)
+                    phase = phase[:,self.output_index]
+                    #print(phase.shape)
                 phases.append(phase)
+            if self.output_index is not None:
+                polarization = polarization[self.output_index]
             results.append(polarization)
         data[self.output_key] = torch.stack(results, dim=0)
         if len(phases) > 0:
-            data[self.phase_key] = torch.stack(phases, dim=0)
+            data[self.phase_key] = torch.stack(phases, dim=1)
         else:
             data[self.phase_key] = 0.0
         return data
@@ -71,15 +79,17 @@ class Dephase(nn.Module):
                  input_key: str = None,
                  phase_key: str = 'phase',
                  output_key: str = 'dephased',
+                 input_index: int = None,
                  ):
         super().__init__()
         self.input_key = input_key
+        self.input_index = input_index
         self.output_key = output_key
         self.phase_key = phase_key
         self.model_outputs = [output_key]
 
     def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
-        result = data[self.input_key] * data[self.phase_key].unsqueeze(-2).conj()
+        result = data[self.input_key] * data[self.phase_key].conj()
         data[self.output_key] = result.real
         return data
 
