@@ -83,9 +83,7 @@ class EwaldPotential(nn.Module):
                 # the box is not periodic, we use the direct sum
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
             elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
-                #box_now = box_now.diagonal(dim1=-2, dim2=-1)
-                #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
-                #pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
+                # the box is periodic, we use the reciprocal sum
                 pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
             else:
                 raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
@@ -362,20 +360,12 @@ class EwaldPotential(nn.Module):
     def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field=False):
         device = r_raw.device
 
-        # Compute reciprocal lattice vectors and their norms
-        # cell_now # [3,3] M
         cell_inv = torch.linalg.inv(cell_now)
-        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3], G = 2π (M^{-1})^T
-
-        # Determine Nk based on reciprocal lattice vectors and dl
-        #G_norms = torch.norm(G, dim=1)  # Norms of each G vector
-        #k_max = 2 * torch.pi / self.dl
-        # Nk = [max(1, int((k_max / gn).item())) for gn in G_norms]
+        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3], G = 2π(M^{-1}).T
 
         # max Nk for each axis
         norms = torch.norm(cell_now, dim=1)
         Nk = [max(1, int(n.item() / self.dl)) for n in norms]
-        # Generate n1, n2, n3 including negative indices
         n1 = torch.arange(-Nk[0], Nk[0] + 1, device=device)
         n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
         n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
@@ -394,7 +384,7 @@ class EwaldPotential(nn.Module):
         nvec = nvec[mask] # [M, 3]
 
         # Determine symmetry factors (handle hemisphere to avoid double-counting)
-        # Lexicographical order: include nvec if first non-zero component is positive
+        # Include nvec if first non-zero component is positive
         non_zero = (nvec != 0).to(torch.int)
         first_non_zero = torch.argmax(non_zero, dim=1)
         sign = torch.gather(nvec, 1, first_non_zero.unsqueeze(1)).squeeze()
@@ -403,15 +393,12 @@ class EwaldPotential(nn.Module):
         k_sq = k_sq[hemisphere_mask]
         factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0)
 
-        # Compute structure factor S(k)
-        #S(k) = Σ_i q_i e^{i k · r_i}
-        #exp(i k·r) = exp(i 2π n·s) (where s = M⁻¹ r). but here we use k·r
+        # Compute structure factor S(k), Σq*e^(ikr)
         k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
         exp_ikr = torch.exp(1j * k_dot_r)
         S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
 
-        # Compute kfac
-        # kfac = exp(-σ^2/2 k^2) / k^2 for exponent = 1
+        # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
         if self.exponent == 1:
             kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
         elif self.exponent == 6:
@@ -422,8 +409,7 @@ class EwaldPotential(nn.Module):
                 (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
             )
         
-        # (2π/volume)* sum(factors * kfac * |S(k)|²)
-        # Compute potential
+        # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
         pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
         
