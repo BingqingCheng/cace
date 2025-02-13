@@ -128,6 +128,16 @@ class NeuralNetworkPotential(AtomisticModel):
         self.collect_derivatives()
         self.collect_outputs()
 
+    def add_module(self, module: nn.Module, module_type: str = "output"):
+        if module_type == "input":
+            self.input_modules.append(module)
+        elif module_type == "output":
+            self.output_modules.append(module)
+            self.collect_derivatives()
+            self.collect_outputs()
+        else:
+            raise ValueError(f"Unknown module type {module_type}")
+
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
                 training: bool = False, 
