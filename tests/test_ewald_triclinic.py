@@ -34,7 +34,6 @@ torch.manual_seed(0)
 r = torch.rand(100, 3, ) * 10  # Random positions in a 10x10x10 box
 q = torch.rand(100) * 2 - 1 # Random charges
 
-#q -= torch.mean(q)
 box = torch.tensor([10.0, 10.0, 10.0], dtype=torch.float64)  # Box dimensions
 box_3d = torch.tensor([[10.0, 0.0, 0.0],
                          [0.0, 10.0, 0.0],
@@ -79,18 +78,16 @@ box_tric = torch.tensor([[10.0, 2.0, 1.0],
                          [0.0, 0.0, 10.0]])
 
 s_rand = torch.rand(100, 3)
-r_tric = torch.matmul(s_rand, box_tric)
+r_tric = torch.matmul(s_rand, box_tric) # Random positions in a triclinic box
 q_tric = torch.rand(100) * 2 - 1
 
-# Create an instance of EwaldPotential with given parameters.
 ep = cace.modules.EwaldPotential(dl=2, sigma=1, exponent=1, feature_key='q', aggregation_mode='sum')
 
-# Compute energy for the original triclinic configuration.
+
 ew_tric = ep.compute_potential_triclinic(r_tric, q_tric.unsqueeze(1), box_tric)
 
 # Replicate the cell 2x2x2 times.
 rep_r, rep_q, new_box = replicate_box_tri(r_tric, q_tric, box_tric, nx=2, ny=2, nz=2)
-# Compute energy for the replicated configuration and divide by 8 (replication factor)
 ew_tric_rep = ep.compute_potential_triclinic(rep_r, rep_q.unsqueeze(1), new_box)
 
 print('###triclinic cell test###')
