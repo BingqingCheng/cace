@@ -101,6 +101,7 @@ class NeuralNetworkPotential(AtomisticModel):
         output_modules: List[nn.Module] = None,
         postprocessors: Optional[List[Transform]] = None,
         do_postprocessing: bool = False,
+        keep_graph: bool = False,
     ):
         """
         Args:
@@ -127,6 +128,8 @@ class NeuralNetworkPotential(AtomisticModel):
 
         self.collect_derivatives()
         self.collect_outputs()
+
+        self.keep_graph = keep_graph
 
     def add_module(self, module: nn.Module, module_type: str = "output"):
         if module_type == "input":
@@ -157,6 +160,8 @@ class NeuralNetworkPotential(AtomisticModel):
             data = self.representation(data)
 
         for m in self.output_modules:
+            if hasattr(self, "keep_graph"):
+                training = training or self.keep_graph
             data = m(data, training=training, output_index=output_index)
 
         # apply postprocessing (if enabled)
