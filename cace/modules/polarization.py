@@ -112,5 +112,5 @@ class FixedCharge(nn.Module):
         charge = torch.tensor([self.charge_dict[atomic_number.item()] for atomic_number in atomic_numbers], device=atomic_numbers.device)
         if self.normalize:
             charge = charge * self.normalization_factor # to be consistent with the internal units and the Ewald sum
-        data['q'] = charge
+        data[self.output_key] = charge[:,None]
         return data
