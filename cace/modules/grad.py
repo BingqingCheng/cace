@@ -26,23 +26,37 @@ class Grad(nn.Module):
     def forward(self, data: Dict[str, torch.Tensor], training: bool = True, output_index: int = None) -> Dict[str, torch.Tensor]:
         y = data[self.y_key]
         x = data[self.x_key]
+
+        if y.is_complex():
+            get_imag = True
+        else:
+            get_imag = False
+
         if len(y.shape) == 1:
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y)]
-            gradient = torch.autograd.grad(
+            gradient_real = torch.autograd.grad(
                 outputs=[y],  # [n_graphs, ]
                 inputs=[x],  # [n_nodes, 3]
                 grad_outputs=grad_outputs,
-                retain_graph=training,  # Make sure the graph is not destroyed during training
+                retain_graph=(training or get_imag),  # Make sure the graph is not destroyed during training
                 create_graph=training,  # Create graph for second derivative
                 allow_unused=True,  # For complete dissociation turn to true
             )[0]  # [n_nodes, 3]
+
+            if get_imag:
+                gradient_imag = torch.autograd.grad(
+                    outputs=[y/1j],  # [n_graphs, ]
+                    inputs=[x],  # [n_nodes, 3]
+                    grad_outputs=grad_outputs,
+                    retain_graph=training,  # Make sure the graph is not destroyed during training
+                    create_graph=training,  # Create graph for second derivative
+                    allow_unused=True,  # For complete dissociation turn to true
+                )[0]  # [n_nodes, 3]
+            else:
+                gradient_imag = 0.0
         else:
             dim_y = y.shape[1] 
             grad_outputs: List[Optional[torch.Tensor]] = [torch.ones_like(y[:,0])]
-            if y.is_complex():
-                get_imag = True
-            else:
-                get_imag = False
             gradient_real = torch.stack([
                 torch.autograd.grad(
                 outputs=[y[:,i]],  # [n_graphs, ]
@@ -65,10 +79,11 @@ class Grad(nn.Module):
                     allow_unused=True,  # For complete dissociation turn to true
                     )[0] for i in range(dim_y)
                    ], axis=2)  # [n_nodes, 3, num_energy]
-                data[self.output_key] = gradient_real + 1j * gradient_imag
-            else:
-                data[self.output_key] = gradient_real
-
+        if get_imag:
+            data[self.output_key] = gradient_real + 1j * gradient_imag
+        else:
+            data[self.output_key] = gradient_real
+        
         return data 
 
     def __repr__(self):
