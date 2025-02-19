@@ -173,7 +173,6 @@ class Cace(nn.Module):
         # Embeddings
         ## code each node/element in one-hot way
         node_one_hot = self.node_onehot(data['atomic_numbers'])
-        data['node_one_hot'] = node_one_hot
 
         ## embed to a different dimension
         node_embedded_sender = self.node_embedding_sender(node_one_hot)
