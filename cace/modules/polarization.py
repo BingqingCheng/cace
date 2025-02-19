@@ -30,7 +30,7 @@ class Polarization(nn.Module):
         else:
             batch_now = data["batch"]
 
-        box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
+        box = data['cell'].view(-1, 3, 3)
 
         r = data['positions']
         q = data[self.charge_key]
@@ -52,13 +52,12 @@ class Polarization(nn.Module):
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             r_now, q_now, box_now = r[mask], q[mask], box[i]
-            if box_now[0] < 1e-6 and box_now[1] < 1e-6 and box_now[2] < 1e-6 or self.pbc == False:
+            box_diag = box[i].diagonal(dim1=-2, dim2=-1)
+            if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 or self.pbc == False:
                 # the box is not periodic, we use the direct sum
                 polarization = torch.sum(q_now * r_now, dim=0)
-            elif box_now[0] > 0 and box_now[1] > 0 and box_now[2] > 0:
-                factor = box_now / (1j * 2.* torch.pi)
-                phase = torch.exp(1j * 2.* torch.pi * r_now / box_now)
-                polarization = torch.sum(q_now * phase, dim=(0)) * factor
+            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
+                polarization, phase = self.compute_pol_pbc(r_now, q_now, box_now)
                 if self.output_index is not None:
                     phase = phase[:,self.output_index]
                 phases.append(phase)
@@ -71,6 +70,14 @@ class Polarization(nn.Module):
         else:
             data[self.phase_key] = 0.0
         return data
+    
+    def compute_pol_pbc(self, r_now, q_now, box_now):
+        r_frac = torch.matmul(r_now, torch.linalg.inv(box_now))
+        phase = torch.exp(1j * 2.* torch.pi * r_frac)
+        S = torch.sum(q_now * phase, dim=0)
+        polarization = torch.matmul(box_now.to(torch.complex128), 
+                                    S.to(torch.complex128).unsqueeze(1)) / (1j * 2.* torch.pi)
+        return polarization.reshape(-1), phase
 
 class Dephase(nn.Module):
     def __init__(self,
