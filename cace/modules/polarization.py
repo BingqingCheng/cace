@@ -12,6 +12,7 @@ class Polarization(nn.Module):
                  phase_key: str = 'phase',
                  remove_mean: bool = True,
                  pbc: bool = False,
+                 normalization_factor: float = 1./9.48933,
                  ):
         super().__init__()
         self.charge_key = charge_key
@@ -21,6 +22,7 @@ class Polarization(nn.Module):
         self.model_outputs = [output_key, phase_key]
         self.remove_mean = remove_mean
         self.pbc = pbc
+        self.normalization_factor = normalization_factor
 
     def forward(self, data: Dict[str, torch.Tensor], training=True, output_index=None) -> torch.Tensor:
 
@@ -63,10 +65,10 @@ class Polarization(nn.Module):
                 phases.append(phase)
             if self.output_index is not None:
                 polarization = polarization[self.output_index]
-            results.append(polarization)
+            results.append(polarization * self.normalization_factor)
         data[self.output_key] = torch.stack(results, dim=0)
         if len(phases) > 0:
-            data[self.phase_key] = torch.stack(phases, dim=1)
+            data[self.phase_key] = torch.cat(phases, dim=0)
         else:
             data[self.phase_key] = 0.0
         return data
@@ -94,7 +96,7 @@ class Dephase(nn.Module):
         self.model_outputs = [output_key]
 
     def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
-        result = data[self.input_key] * data[self.phase_key].conj()
+        result = data[self.input_key] * data[self.phase_key].unsqueeze(1).conj()
         data[self.output_key] = result.real
         return data
 
@@ -104,30 +106,18 @@ class FixedCharge(nn.Module):
                  output_key: str = 'q',
                  charge_dict: Dict[int, float] = None,
                  normalize: bool = True,
-                 trainable: bool = False,
                  ):
         super().__init__()
+        self.charge_dict = charge_dict
         self.atomic_numbers_key = atomic_numbers_key
         self.output_key = output_key
         self.normalize = normalize
         self.normalization_factor = 9.48933 
-        self.elements = [ key for key in charge_dict.keys()]
-        element_charges = torch.tensor([charge_dict[key] for key in charge_dict.keys()], dtype=torch.float32)
-        if trainable:
-            self.element_charges = nn.Parameter(element_charges)
-        else:
-            self.register_buffer("element_charges", element_charges)
     
-    def get_charge_dict(self):
-        return {element: self.element_charges[i] for i, element in enumerate(self.elements)}
-
     def forward(self, data: Dict[str, torch.Tensor], training=None, output_index=None) -> torch.Tensor:
         atomic_numbers = data[self.atomic_numbers_key]
-        charge = torch.zeros(atomic_numbers.shape[0], device=atomic_numbers.device)
-        for i, element in enumerate(self.elements):
-            mask = atomic_numbers == element
-            charge[mask] = self.element_charges[i]
+        charge = torch.tensor([self.charge_dict[atomic_number.item()] for atomic_number in atomic_numbers], device=atomic_numbers.device)
         if self.normalize:
             charge = charge * self.normalization_factor # to be consistent with the internal units and the Ewald sum
-        data['q'] = charge
+        data[self.output_key] = charge[:,None]
         return data
