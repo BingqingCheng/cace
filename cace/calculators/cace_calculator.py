@@ -128,9 +128,9 @@ class CACECalculator(Calculator):
         self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
         if self.external_field is not None:
             if isinstance(self.external_field, float):
-                self.results["forces"] = bec_output * self.external_field
+                self.results["forces"] += bec_output * self.external_field * self.energy_units_to_eV / self.length_units_to_A
             else:
-                self.results["forces"] = bec_output @ self.external_field
+                self.results["forces"] += bec_output @ self.external_field * self.energy_units_to_eV / self.length_units_to_A
         if self.compute_stress and output[self.stress_key] is not None:
             stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:
