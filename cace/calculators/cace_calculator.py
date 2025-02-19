@@ -32,6 +32,7 @@ class CACECalculator(Calculator):
         device: str,
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
+        electric_field_unit: float = 1.0,
         compute_stress = False,
         energy_key: str = 'energy',
         forces_key: str = 'forces',
@@ -63,6 +64,7 @@ class CACECalculator(Calculator):
         self.device = torch_tools.init_device(device)
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
+        self.electric_field_unit = electric_field_unit
 
         try:
             self.cutoff = self.model.representation.cutoff
@@ -128,9 +130,9 @@ class CACECalculator(Calculator):
         self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
         if self.external_field is not None:
             if isinstance(self.external_field, float):
-                self.results["forces"] += bec_output * self.external_field * self.energy_units_to_eV / self.length_units_to_A
+                self.results["forces"] += bec_output * self.external_field * self.electric_field_unit
             else:
-                self.results["forces"] += bec_output @ self.external_field * self.energy_units_to_eV / self.length_units_to_A
+                self.results["forces"] += bec_output @ self.external_field * self.electric_field_unit
         if self.compute_stress and output[self.stress_key] is not None:
             stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:
