@@ -75,8 +75,8 @@ class Polarization(nn.Module):
         r_frac = torch.matmul(r_now, torch.linalg.inv(box_now))
         phase = torch.exp(1j * 2.* torch.pi * r_frac)
         S = torch.sum(q_now * phase, dim=0)
-        polarization = torch.matmul(box_now.to(torch.complex128), 
-                                    S.to(torch.complex128).unsqueeze(1)) / (1j * 2.* torch.pi)
+        polarization = torch.matmul(box_now.to(S.dtype), 
+                                    S.unsqueeze(1)) / (1j * 2.* torch.pi)
         return polarization.reshape(-1), phase
 
 class Dephase(nn.Module):
