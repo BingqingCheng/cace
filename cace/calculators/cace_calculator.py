@@ -79,10 +79,13 @@ class CACECalculator(Calculator):
         self.stress_key = stress_key
         self.bec_key = bec_key
 
-        if isinstance(external_field, float):
-            self.external_field = external_field
+        if external_field is not None:
+            if isinstance(external_field, float):
+                self.external_field = external_field
+            else:
+                self.external_field = np.array(external_field)
         else:
-            self.external_field = np.array(external_field)
+            self.external_field = None      
         self.output_index = output_index
         
         for param in self.model.parameters():
