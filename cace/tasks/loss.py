@@ -54,18 +54,22 @@ class GetLoss(nn.Module):
         else: 
             loss_weight = self.loss_weight
 
+        if self.output_index is None:
+            pred_tensor = pred[self.predict_name]
+        else:
+            pred_tensor = pred[self.predict_name][..., self.output_index]
+
+        if pred_tensor.shape != target[self.target_name].shape:
+            pred_tensor = pred_tensor.reshape(target[self.target_name].shape)
+
         if target is not None:
-            loss = loss_weight * self.loss_fn(
-                pred[self.predict_name] if self.output_index is None else pred[self.predict_name][..., self.output_index], 
-                target[self.target_name]
-            )
+            target_tensor = target[self.target_name]
         elif self.predict_name != self.target_name:
-            loss = loss_weight * self.loss_fn(
-                pred[self.predict_name] if self.output_index is None else pred[self.predict_name][..., self.output_index], 	
-                pred[self.target_name]
-            )
+            target_tensor = pred[self.target_name]
         else:
             raise ValueError("Target is None and predict_name is not equal to target_name")
+
+        loss = loss_weight * self.loss_fn(pred_tensor, target_tensor)
         return loss
 
     def __repr__(self):

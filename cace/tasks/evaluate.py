@@ -186,9 +186,25 @@ class EvaluateTask(nn.Module):
                         atoms.set_array(self.forces_key, forces_list[i] * self.energy_units_to_eV / self.length_units_to_A)
                     for key in self.other_keys:
                         output_now = other_outputs[key][i]
+                        #print(key, output_now.shape) 
+                        if output_now.ndim > 2 and output_now.shape[0] == 1:
+                            output_now = output_now[0]
                         if output_now.ndim > 2:
                             output_now = output_now.reshape(output_now.shape[0], -1)
-                        atoms.set_array(key, output_now)
+                        #print(key, output_now.shape) 
+                        # is complex
+                        if np.iscomplexobj(output_now):
+                            if output_now.shape[0] == len(atoms.get_positions()):
+                                atoms.set_array(key+'_real', output_now.real)
+                                atoms.set_array(key+'_imag', output_now.imag)
+                            else:
+                                atoms.info[key+'_real'] = output_now.real
+                                atoms.info[key+'_imag'] = output_now.imag
+                        else:
+                            if output_now.shape[0] == len(atoms.get_positions()):
+                                atoms.set_array(key, output_now)
+                            else:
+                                atoms.info[key] = output_now
                     if compute_stress:
                         atoms.info[self.stress_key] = stresses_list[i]
                     atoms_list.append(atoms)

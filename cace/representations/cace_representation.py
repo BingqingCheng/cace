@@ -173,6 +173,7 @@ class Cace(nn.Module):
         # Embeddings
         ## code each node/element in one-hot way
         node_one_hot = self.node_onehot(data['atomic_numbers'])
+
         ## embed to a different dimension
         node_embedded_sender = self.node_embedding_sender(node_one_hot)
         node_embedded_receiver = self.node_embedding_receiver(node_one_hot)
@@ -277,7 +278,7 @@ class Cace(nn.Module):
             "displacement": displacement,
             "batch": batch_now,
             "node_feats": node_feats_out,
-            "node_feats_A": node_feats_A_out,
+            #"node_feats_A": node_feats_A_out,
             }
 
         if hasattr(self, "forward_features") and len(self.forward_features) > 0:

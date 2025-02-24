@@ -200,12 +200,12 @@ class AtomicData(torch_geometric.data.Data):
         # enumerate the data_key and extract data
         additional_info = {}
         for key, kk in data_key.items():
-            if kk is None or key in ['energy', 'forces', 'stress', 'virial', 'molecular_index']:
+            if kk is None or key in ['energy', 'forces', 'stress', 'virials', 'molecular_index']:
                 continue
             else:
-                more_info = atoms.info.get(data_key[kk], None)
+                more_info = atoms.info.get(kk, None)
                 if more_info is None:
-                    more_info = atoms.arrays.get(data_key[kk], None)
+                    more_info = atoms.arrays.get(kk, None)
                 more_info = (
                     torch.tensor(more_info, dtype=torch.get_default_dtype())
                     if more_info is not None

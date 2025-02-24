@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from itertools import product
 from typing import Dict
+import numpy as np
 
 class EwaldPotential(nn.Module):
     def __init__(self,
@@ -57,7 +58,8 @@ class EwaldPotential(nn.Module):
         if hasattr(self, 'compute_field') == False:
             self.compute_field = False
         
-        box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
+        # box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
+        box = data['cell'].view(-1, 3, 3)
         r = data['positions']
         q = data[self.feature_key]
         if q.dim() == 1:
@@ -76,12 +78,13 @@ class EwaldPotential(nn.Module):
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
-            if box_now[0] < 1e-6 and box_now[1] < 1e-6 and box_now[2] < 1e-6 and self.exponent == 1:
+            box_diag = box[i].diagonal(dim1=-2, dim2=-1)
+            if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
                 # the box is not periodic, we use the direct sum
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
-            elif box_now[0] > 0 and box_now[1] > 0 and box_now[2] > 0:
-                pot, field = self.compute_potential_optimized(r_raw_now, q_now, box_now, self.compute_field)
-                #pot, field = self.compute_potential(r_raw_now, q_now, box_now, self.compute_field)
+            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
+                # the box is periodic, we use the reciprocal sum
+                pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
             else:
                 raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
 
@@ -102,7 +105,7 @@ class EwaldPotential(nn.Module):
                         external_field_now = data[self.external_field][i]
                     except:
                         raise ValueError("external_field must be a float or a key to the external field")
-
+                box_now = box_now.diagonal(dim1=-2, dim2=-1)
                 pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
             else:
                 pot_ext = 0.0
@@ -312,7 +315,7 @@ class EwaldPotential(nn.Module):
         else:
             raise ValueError("q must be 1D or 2D tensor")
         # q_expanded: [n_node, n_q, 1, 1, 1]
-        # eik: [n_node, n_x, n_x, n_z]
+        # eik: [n_node, n_x, n_y, n_z]
         # sk: [n_q, n_x, n_y, n_z]
         # kfac: [n_x, n_y, n_z]
         eik = eikx_expanded * eiky_expanded * eikz_expanded
@@ -343,3 +346,78 @@ class EwaldPotential(nn.Module):
 
     def change_external_field(self, external_field):
         self.external_field = external_field
+
+    def is_orthorhombic(self, cell_matrix):
+        diag_matrix = torch.diag(torch.diagonal(cell_matrix))
+        is_orthorhombic = torch.allclose(cell_matrix, diag_matrix, atol=1e-6)
+        return is_orthorhombic
+    
+    # Triclinic box(could be orthorhombic)
+    def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field=False):
+        device = r_raw.device
+
+        cell_inv = torch.linalg.inv(cell_now)
+        G = 2 * torch.pi * cell_inv.T  # Reciprocal lattice vectors [3,3], G = 2π(M^{-1}).T
+
+        # max Nk for each axis
+        norms = torch.norm(cell_now, dim=1)
+        Nk = [max(1, int(n.item() / self.dl)) for n in norms]
+        n1 = torch.arange(-Nk[0], Nk[0] + 1, device=device)
+        n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
+        n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
+
+        # Create nvec grid and compute k vectors
+        nvec = torch.stack(torch.meshgrid(n1, n2, n3, indexing="ij"), dim=-1).reshape(-1, 3)
+        nvec = nvec.to(G.dtype)
+        # kvec = G @ nvec
+        kvec = (nvec.float() @ G).to(device)  # [N_total, 3]
+
+        # Apply k-space cutoff and filter
+        k_sq = torch.sum(kvec ** 2, dim=1)
+        mask = (k_sq > 0) & (k_sq <= self.k_sq_max)
+        kvec = kvec[mask] # [M, 3]
+        k_sq = k_sq[mask] # [M]
+        nvec = nvec[mask] # [M, 3]
+
+        # Determine symmetry factors (handle hemisphere to avoid double-counting)
+        # Include nvec if first non-zero component is positive
+        non_zero = (nvec != 0).to(torch.int)
+        first_non_zero = torch.argmax(non_zero, dim=1)
+        sign = torch.gather(nvec, 1, first_non_zero.unsqueeze(1)).squeeze()
+        hemisphere_mask = (sign > 0) | ((nvec == 0).all(dim=1))
+        kvec = kvec[hemisphere_mask]
+        k_sq = k_sq[hemisphere_mask]
+        factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0)
+
+        # Compute structure factor S(k), Σq*e^(ikr)
+        k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
+        exp_ikr = torch.exp(1j * k_dot_r)
+        S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
+
+        # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
+        if self.exponent == 1:
+            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
+        elif self.exponent == 6:
+            b_sq = k_sq * self.sigma_sq_half
+            b = torch.sqrt(b_sq)
+            kfac = -1.0 * k_sq**(3/2) * (
+                torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
+                (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
+            )
+        
+        # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
+        volume = torch.det(cell_now)
+        pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
+        
+        # Compute electric field if needed
+        q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
+        if compute_field:
+            sk_field = 2 * kfac * torch.conj(S_k)
+            q_field = (factors * torch.real(exp_ikr * sk_field)).sum(dim=1) / volume
+
+        # Remove self-interaction if applicable
+        if self.remove_self_interaction and self.exponent == 1:
+            pot -= torch.sum(q**2) / (self.sigma * (2 * torch.pi)**1.5)
+            q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))
+
+        return pot.unsqueeze(0) * self.norm_factor, q_field.unsqueeze(1) * self.norm_factor

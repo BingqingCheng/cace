@@ -96,12 +96,12 @@ class NeuralNetworkPotential(AtomisticModel):
 
     def __init__(
         self,
-        representation: nn.Module,
+        representation: nn.Module = None,
         input_modules: List[nn.Module] = None,
         output_modules: List[nn.Module] = None,
-        #input_dtype_str: str = "float32",
         postprocessors: Optional[List[Transform]] = None,
         do_postprocessing: bool = False,
+        keep_graph: bool = False,
     ):
         """
         Args:
@@ -116,7 +116,6 @@ class NeuralNetworkPotential(AtomisticModel):
             do_postprocessing: If true, post-processing is activated.
         """
         super().__init__(
-            #input_dtype_str=input_dtype_str,
             postprocessors=postprocessors,
             do_postprocessing=do_postprocessing,
         )
@@ -129,6 +128,18 @@ class NeuralNetworkPotential(AtomisticModel):
 
         self.collect_derivatives()
         self.collect_outputs()
+
+        self.keep_graph = keep_graph
+
+    def add_module(self, module: nn.Module, module_type: str = "output"):
+        if module_type == "input":
+            self.input_modules.append(module)
+        elif module_type == "output":
+            self.output_modules.append(module)
+            self.collect_derivatives()
+            self.collect_outputs()
+        else:
+            raise ValueError(f"Unknown module type {module_type}")
 
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
@@ -145,9 +156,12 @@ class NeuralNetworkPotential(AtomisticModel):
         for m in self.input_modules:
             data = m(data, compute_stress=compute_stress, compute_virials=compute_virials)
 
-        data = self.representation(data)
+        if self.representation is not None:
+            data = self.representation(data)
 
         for m in self.output_modules:
+            if hasattr(self, "keep_graph"):
+                training = training or self.keep_graph
             data = m(data, training=training, output_index=output_index)
 
         # apply postprocessing (if enabled)

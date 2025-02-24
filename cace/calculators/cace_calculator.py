@@ -1,6 +1,6 @@
 # the CACE calculator for ASE
 
-from typing import Union
+from typing import Union, List
 
 import numpy as np 
 import torch
@@ -32,10 +32,13 @@ class CACECalculator(Calculator):
         device: str,
         energy_units_to_eV: float = 1.0,
         length_units_to_A: float = 1.0,
+        electric_field_unit: float = 1.0,
         compute_stress = False,
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
+        bec_key: str = 'bec',
+        external_field: Union[float,List[float]] = None,
         atomic_energies: dict = None,
         output_index: int = None, # only used for multi-output models
         **kwargs,
@@ -61,6 +64,7 @@ class CACECalculator(Calculator):
         self.device = torch_tools.init_device(device)
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
+        self.electric_field_unit = electric_field_unit
 
         try:
             self.cutoff = self.model.representation.cutoff
@@ -73,7 +77,15 @@ class CACECalculator(Calculator):
         self.energy_key = energy_key 
         self.forces_key = forces_key
         self.stress_key = stress_key
+        self.bec_key = bec_key
 
+        if external_field is not None:
+            if isinstance(external_field, float):
+                self.external_field = external_field
+            else:
+                self.external_field = np.array(external_field)
+        else:
+            self.external_field = None      
         self.output_index = output_index
         
         for param in self.model.parameters():
@@ -107,9 +119,11 @@ class CACECalculator(Calculator):
 
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
-        output = self.model(batch.to_dict(), training=False, compute_stress=self.compute_stress, output_index=self.output_index)
+        output = self.model(batch.to_dict(), training=True, compute_stress=self.compute_stress, output_index=self.output_index)
         energy_output = to_numpy(output[self.energy_key])
         forces_output = to_numpy(output[self.forces_key])
+        if self.external_field is not None and self.bec_key is not None:
+            bec_output = to_numpy(output[self.bec_key])
         # subtract atomic energies if available
         if self.atomic_energies:
             e0 = sum(self.atomic_energies.get(Z, 0) for Z in atoms.get_atomic_numbers())
@@ -117,6 +131,11 @@ class CACECalculator(Calculator):
             e0 = 0.0
         self.results["energy"] = (energy_output + e0) * self.energy_units_to_eV
         self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
+        if self.external_field is not None:
+            if isinstance(self.external_field, float):
+                self.results["forces"] += bec_output * self.external_field * self.electric_field_unit
+            else:
+                self.results["forces"] += bec_output @ self.external_field * self.electric_field_unit
         if self.compute_stress and output[self.stress_key] is not None:
             stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:
