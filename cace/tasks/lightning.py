@@ -4,12 +4,20 @@ import logging
 import torch
 import torch.nn as nn
 import lightning as L
-from . import GetLoss
-from ..tools import Metrics
 from typing import Dict, Optional, List, Tuple
 from lightning.pytorch.callbacks import LearningRateMonitor
+from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.callbacks import Callback
+from datetime import datetime
+from . import GetLoss
+from ..tools import Metrics
+from ..tools import torch_geometric
+from ..data import AtomicData
+from . import get_dataset_from_xyz, load_data_loader
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
+
+DEVICE_COUNT = torch.cuda.device_count()
 
 def default_losses(e_weight=0.1,f_weight=1000,e_name="energy",f_name="force"):
     e_loss = GetLoss(
@@ -67,7 +75,7 @@ class LightningModel(L.LightningModule):
         self.scheduler_args = scheduler_args
         self.lr_scheduler_config = lr_scheduler_config
         self.train_dct = {}
-        
+
     def forward(self,
                 data: Dict[str, torch.Tensor],
                 kwargs = None, #dict
@@ -76,21 +84,21 @@ class LightningModel(L.LightningModule):
             kwargs = self.val_args
         return self.model.forward(data,**kwargs)
 
-    def calculate_loss(self, 
-            data: Dict[str, torch.Tensor], 
+    def calculate_loss(self,
+            data: Dict[str, torch.Tensor],
             ) -> Tuple[torch.Tensor, Dict[int, torch.Tensor]]:
-        
+
         #Forward -- get a dictionary of predicted tensors
         results = self.forward(data,self.train_args)
-        
+
         #Calculate loss
         tot_loss = 0
         for i, loss_fn in enumerate(self.losses):
             loss = loss_fn(results,data)
             tot_loss = tot_loss + loss
         return tot_loss, results
-        
-    def calculate_metrics(self, 
+
+    def calculate_metrics(self,
                 data: Dict[str, torch.Tensor],
                 results : Dict[str, torch.Tensor],
                 ) -> Tuple[Dict[int, torch.Tensor], str]:
@@ -116,7 +124,7 @@ class LightningModel(L.LightningModule):
                 self.log(f"train_{k}",v,batch_size=batch_size)
                 self.train_dct[k] = v
         return loss
-    
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), **self.optimizer_args)
         lr_scheduler = self.lr_scheduler(optimizer,**self.scheduler_args)
@@ -124,7 +132,7 @@ class LightningModel(L.LightningModule):
         lr_scheduler_config["scheduler"] = lr_scheduler
         opt_info = {"optimizer": optimizer,"lr_scheduler": lr_scheduler_config}
         return opt_info
-        
+
     def validation_step(self,
                       data : Dict[int, torch.Tensor],
                       val_idx : int) -> None:
@@ -146,8 +154,15 @@ class LightningModel(L.LightningModule):
         for k,v in dct.items():
             self.log(f"val_{k}",v,batch_size=batch_size)
 
-from lightning.pytorch.callbacks import Callback
-from datetime import datetime
+    def setup(self, stage=None):
+        print("model setup")
+        if hasattr(self.trainer, 'datamodule') and self.trainer.datamodule is not None:
+            train_loader = self.trainer.datamodule.train_dataloader()
+            batch = next(iter(train_loader))
+            _ = self(batch)
+        else:
+            raise ValueError("Datamodule is not available during setup.")
+
 class TextCallback(Callback):
     """PyTorch Lightning metric callback."""
 
@@ -163,7 +178,7 @@ class TextCallback(Callback):
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
         with open(self.log_fn,"a") as f:
             f.write(f"{dt_string} {s}\n")
-            
+
     @property
     def state_key(self) -> str:
         return "TextCallback"
@@ -184,7 +199,7 @@ class TextCallback(Callback):
         if trainer.sanity_checking:
             return None
         epoch = trainer.current_epoch
-        
+
         val_loss = trainer.callback_metrics["val_loss"]
         self.log_info(f"Epoch {epoch} val_loss: {val_loss:.8f}")
         if val_loss < self.state["best_val_loss"]:
@@ -198,7 +213,7 @@ class TextCallback(Callback):
         #Log training
         for k,v in pl_module.train_dct.items():
             self.log_info(f"Epoch {epoch} train_{k}: {v:.8f}")
-        
+
         #Log validation
         for k,v in trainer.callback_metrics.items():
             if k == "val_loss":
@@ -226,7 +241,7 @@ class LightningTrainingTask():
         self.logs_directory = logs_directory
         self.text_logging = text_logging
         self.save_pkl = save_pkl
-        
+
         #Text callbacks
         if text_logging:
             if name is None:
@@ -246,7 +261,7 @@ class LightningTrainingTask():
                 val_model_path = f"{model_directory}/best_model_state.pth"
             self.val_model_path = val_model_path
             self.callbacks.append(TextCallback(log_fn,val_model_path,save_pkl))
-        
+
         self.model = LightningModel(model, model_directory,
                                     losses = losses,
                                     metrics = metrics,
@@ -260,7 +275,6 @@ class LightningTrainingTask():
 
     def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,check_val_every_n_epoch=1,
             gradient_clip_val=10,accelerator="auto",progress_bar=True):
-        from lightning.pytorch.loggers import TensorBoardLogger
         logger = TensorBoardLogger(self.logs_directory,name=self.name)
         if (max_steps is None) and (max_epochs is None):
             print("Please input max_steps or max_epochs")
@@ -271,12 +285,12 @@ class LightningTrainingTask():
         if chkpt is not None:
             self.load(chkpt)
         if max_epochs:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
+            trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp", fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
                                 gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         elif max_steps:
-            trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
+            trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp", fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
                                 gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
-        trainer.fit(self.model,data,ckpt_path=chkpt)
+        trainer.fit(self.model,datamodule=data,ckpt_path=chkpt)
 
         #Save final model at end of training
         if not self.save_pkl:
@@ -304,9 +318,6 @@ class LightningTrainingTask():
         print("Loading successful!")
 
 #Data
-from ..tools import torch_geometric
-from ..data import AtomicData
-from . import get_dataset_from_xyz, load_data_loader
 
 class LightningData(L.LightningDataModule):
     def __init__(self, root,
@@ -326,7 +337,7 @@ class LightningData(L.LightningDataModule):
         self.atomic_energies = atomic_energies
         self.data_key = data_key
         self.prepare_data()
-    
+
     def prepare_data(self):
         collection = get_dataset_from_xyz(train_path=self.root,
                                           valid_fraction=self.valid_p,
@@ -335,12 +346,12 @@ class LightningData(L.LightningDataModule):
                                           data_key=self.data_key,
                                           atomic_energies = self.atomic_energies
                                          )
-        
+
         self.train_dataset = [
                 AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
                 for atoms in collection.train
             ]
-        
+
         self.valid_dataset = [
                 AtomicData.from_atoms(atoms, cutoff=self.cutoff, data_key=self.data_key, atomic_energies=self.atomic_energies)
                 for atoms in collection.valid
@@ -353,7 +364,7 @@ class LightningData(L.LightningDataModule):
             drop_last=True,
             num_workers=os.cpu_count()-1,
         )
-        
+
         self.valid_loader = torch_geometric.DataLoader(
             dataset = self.valid_dataset,
             batch_size=self.batch_size,
@@ -361,9 +372,9 @@ class LightningData(L.LightningDataModule):
             drop_last=False,
             num_workers=os.cpu_count()-1,
         )
-        
+
     def train_dataloader(self):
         return self.train_loader
-        
+
     def val_dataloader(self):
         return self.valid_loader
