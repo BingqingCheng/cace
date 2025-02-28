@@ -66,8 +66,8 @@ class Metrics(nn.Module):
                 target: Optional[Dict[str, torch.Tensor]] = None,
                ):
         pred_tensor = pred[self.predict_name].clone().detach()
-        if len(pred_tensor.shape) > 2:
-            pred_tensor = pred_tensor.reshape(pred_tensor.shape[0], -1)
+        # if len(pred_tensor.shape) > 2:
+        #     pred_tensor = pred_tensor.reshape(pred_tensor.shape[0], -1)
         #print("pred_tensor", pred_tensor.shape)
         if self.output_index is not None:
             pred_tensor = pred_tensor[..., self.output_index]
