@@ -231,6 +231,7 @@ class LightningTrainingTask():
                  lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
                  scheduler_args = {'mode': 'min', 'factor': 0.8, 'patience': 10},
                  lr_frequency = 1,
+                 ddp = False,
                  logs_directory = "lightning_logs",
                  name = None,
                  text_logging = True,
@@ -241,6 +242,7 @@ class LightningTrainingTask():
         self.logs_directory = logs_directory
         self.text_logging = text_logging
         self.save_pkl = save_pkl
+        self.ddp = ddp
 
         #Text callbacks
         if text_logging:
@@ -285,11 +287,25 @@ class LightningTrainingTask():
         if chkpt is not None:
             self.load(chkpt)
         if max_epochs:
-            trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp", fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
-                                gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
+            if self.ddp:
+                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",
+                                    fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
+            else:
+                trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         elif max_steps:
-            trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp", fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,check_val_every_n_epoch=check_val_every_n_epoch,
-                                gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
+            if self.ddp:
+                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",
+                                    fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
+            else:
+                trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         trainer.fit(self.model,datamodule=data,ckpt_path=chkpt)
 
         #Save final model at end of training
