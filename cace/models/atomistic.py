@@ -142,12 +142,12 @@ class NeuralNetworkPotential(AtomisticModel):
             raise ValueError(f"Unknown module type {module_type}")
 
     def remove_module(self, module_index: int, module_type: str = "output"):
-	if module_type == "output":
-	    del self.output_modules[module_index]
+        if module_type == "output":
+            del self.output_modules[module_index]
             self.collect_derivatives()
             self.collect_outputs()
-	else:
-	    raise ValueError(f"Unknown module type {module_type}")
+        else:
+            raise ValueError(f"Unknown module type {module_type}")
 
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
