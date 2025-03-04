@@ -85,7 +85,7 @@ class Quadrupole(nn.Module):
     #Only real-space implemented
     def __init__(self,
                  charge_key: str = 'q',
-                 output_key: str = 'quadrupole',
+                 output_key: str = 'pred_quadrupole',
                  remove_mean: bool = True,
                  normalization_factor: float = 1./9.48933,
                  ):
