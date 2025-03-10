@@ -39,6 +39,7 @@ class CACECalculator(Calculator):
         stress_key: str = 'stress',
         bec_key: str = 'bec',
         external_field: Union[float,List[float]] = None,
+        keep_neutral: bool = 'True', # to keep BEC sum to be neutral
         atomic_energies: dict = None,
         output_index: int = None, # only used for multi-output models
         **kwargs,
@@ -78,6 +79,7 @@ class CACECalculator(Calculator):
         self.forces_key = forces_key
         self.stress_key = stress_key
         self.bec_key = bec_key
+        self.keep_neutral = keep_neutral
 
         if external_field is not None:
             if isinstance(external_field, float):
@@ -132,6 +134,9 @@ class CACECalculator(Calculator):
         self.results["energy"] = (energy_output + e0) * self.energy_units_to_eV
         self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
         if self.external_field is not None:
+            if self.keep_neutral:
+                bec_output -= np.average(bec_output, axis=0)
+                
             if isinstance(self.external_field, float):
                 self.results["forces"] += bec_output * self.external_field * self.electric_field_unit
             else:
