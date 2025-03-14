@@ -39,7 +39,7 @@ class CACECalculator(Calculator):
         stress_key: str = 'stress',
         bec_key: str = 'bec',
         external_field: Union[float,List[float]] = None,
-        keep_neutral: bool = 'True', # to keep BEC sum to be neutral
+        keep_neutral: bool = True, # to keep BEC sum to be neutral
         atomic_energies: dict = None,
         output_index: int = None, # only used for multi-output models
         **kwargs,
@@ -133,14 +133,20 @@ class CACECalculator(Calculator):
             e0 = 0.0
         self.results["energy"] = (energy_output + e0) * self.energy_units_to_eV
         self.results["forces"] = forces_output * self.energy_units_to_eV / self.length_units_to_A
-        if self.external_field is not None:
-            if self.keep_neutral:
-                bec_output -= np.average(bec_output, axis=0)
-                
+        if self.external_field is not None:        
             if isinstance(self.external_field, float):
-                self.results["forces"] += bec_output * self.external_field * self.electric_field_unit
+                if self.keep_neutral:
+                    correction = -np.average(bec_output, axis=0)
+                    bec_output += correction
+                forces_bec = bec_output * self.external_field * self.electric_field_unit
+                self.results["forces"] += forces_bec # bec_output * self.external_field * self.electric_field_unit
             else:
-                self.results["forces"] += bec_output @ self.external_field * self.electric_field_unit
+                if self.keep_neutral:
+                    correction = -np.average(bec_output, axis=0)
+                    bec_output += correction
+                forces_bec = bec_output @ self.external_field * self.electric_field_unit
+                self.results["forces"] += forces_bec # bec_output * self.external_field * self.electric_field_unit
+            
         if self.compute_stress and output[self.stress_key] is not None:
             stress = to_numpy(output[self.stress_key])
             # stress has units eng / len^3:
