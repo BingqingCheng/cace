@@ -107,7 +107,7 @@ class Atomwise(nn.Module):
     def forward(self, 
                 data: Dict[str, torch.Tensor], 
                 training: bool = None,
-                output_index: int = None, # only used for multi-head output
+                output_index: Optional[int] = None, # only used for multi-head output
                ) -> Dict[str, torch.Tensor]:
 
         # check if self.feature_key exists, otherwise set default 
@@ -128,7 +128,7 @@ class Atomwise(nn.Module):
         else:
             assert self.n_in == features.shape[1]
 
-        if self.outnet == None:
+        if self.outnet is None:
             self.outnet = build_mlp(
                 n_in=self.n_in,
                 n_out=self.n_out,

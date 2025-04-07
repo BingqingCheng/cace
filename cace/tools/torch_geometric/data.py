@@ -135,8 +135,10 @@ class Data(object):
     @property
     def keys(self):
         r"""Returns all names of graph attributes."""
-        keys = [key for key in self.__dict__.keys() if self[key] is not None]
-        keys = [key for key in keys if key[:2] != "__" and key[-2:] != "__"]
+        keys = []
+        for key in self.__dict__.keys():
+            if self[key] is not None and not (key.startswith("__") and key.endswith("__")):
+                keys.append(key)
         return keys
 
     def __len__(self):

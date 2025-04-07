@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Sequence, Dict
+from typing import Sequence, Dict, Optional
 
 __all__ = [
     'NodeEncoder',
@@ -58,7 +58,7 @@ class NodeEncoder(nn.Module):
         self.num_classes = len(zs)
         self.register_buffer("index_map", torch.tensor([zs.index(z) if z in zs else -1 for z in range(max(zs) + 1)], dtype=torch.int64))
 
-    def forward(self, atomic_numbers) -> torch.Tensor:
+    def forward(self, atomic_numbers: torch.Tensor) -> torch.Tensor:
         device = atomic_numbers.device
 
         # Directly convert atomic numbers to indices using the precomputed map
@@ -73,7 +73,9 @@ class NodeEncoder(nn.Module):
 
         return one_hot_encoding
 
-    def to_one_hot(self, indices: torch.Tensor, num_classes: int, device=torch.device) -> torch.Tensor:
+    def to_one_hot(self, indices: torch.Tensor, num_classes: int, device: Optional[torch.device]=None) -> torch.Tensor:
+        if device is None:
+            device = indices.device
         shape = indices.shape[:-1] + (num_classes,)
         oh = torch.zeros(shape, device=device)
 
@@ -138,16 +140,18 @@ class NodeEmbedding(nn.Module):
         )
 
 class EdgeEncoder(nn.Module):
-    def __init__(self, directed=True):
+    def __init__(self, directed:bool =True):
         super().__init__()
         self.directed = directed
 
     def forward(self,     
                edge_index: torch.Tensor,  # [2, n_edges]
                node_type: torch.Tensor,  # [n_nodes, n_dims]
-               node_type_2: torch.Tensor=None,  # [n_nodes, n_dims]
-               *args, **kwargs
+               node_type_2: Optional[torch.Tensor]=None,  # [n_nodes, n_dims]
+            #    *args, **kwargs
                ) -> torch.Tensor:
+        if node_type_2 is None:
+            node_type_2 = node_type.clone()
         # Split the edge tensor into two parts for node1 and node2
         node1, node2 = get_edge_node_type(edge_index, node_type, node_type_2)
 

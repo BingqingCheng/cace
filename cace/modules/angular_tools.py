@@ -1,9 +1,11 @@
 import itertools
 import torch
 from .angular import l1l2_factorial_coef, lxlylz_factorial_coef, make_lxlylz
+from typing import Dict, List, Tuple
 
-__all__ = ['find_combo_vectors_l1l2', 'find_combo_vectors_nu1', 'find_combo_vectors_nu2', 'find_combo_vectors_nu3', 'find_combo_vectors_nu4', 'find_combo_vectors_nu5']
-
+__all__ = ['find_combo_vectors_l1l2', 'find_combo_vectors_nu1', 'find_combo_vectors_nu2', 
+           'find_combo_vectors_nu3', 'find_combo_vectors_nu4', 'find_combo_vectors_nu5',
+           'find_combo_vectors_nu2_str', 'find_combo_vectors_nu3_str', 'find_combo_vectors_nu4_str']
 """
 We can store the values
 
@@ -252,3 +254,61 @@ def cal_num_B_features(l_m=8):
         n_B_feat += len(vec_dict_allnu[5])
         n_B_feat_dict[(l_max, 5)] = n_B_feat
     return n_B_feat_dict
+
+#added
+def find_combo_vectors_nu2_str(l_max: int) -> Dict[str, List[Tuple[List[List[int]], int]]]:
+    vec_dict: Dict[str, List[Tuple[List[List[int]], int]]] = {}
+    L_list = range(1, l_max + 1)
+    for L in L_list:
+        for lxlylz_now in make_lxlylz(L):
+            prefactor = lxlylz_factorial_coef(lxlylz_now)
+            key = str(L)
+            vec_dict.setdefault(key, []).append(([lxlylz_now, lxlylz_now], prefactor))
+    return vec_dict
+
+##added
+def find_combo_vectors_nu3_str(l_max: int) -> Dict[str, List[Tuple[List[List[int]], int]]]:
+    vec_dict: Dict[str, List[Tuple[List[List[int]], int]]] = {}
+    for lx1, ly1, lz1 in itertools.product(range(l_max + 1), repeat=3):
+        l1 = lx1 + ly1 + lz1
+        if 0 < l1 <= l_max:
+            for lx2, ly2, lz2 in itertools.product(range(l_max + 1), repeat=3):
+                l2 = lx2 + ly2 + lz2
+                if l1 <= l2 <= l_max:
+                    lx3, ly3, lz3 = lx1 + lx2, ly1 + ly2, lz1 + lz2
+                    if (lx3 + ly3 + lz3) <= l_max:
+                        prefactor = lxlylz_factorial_coef([lx1, ly1, lz1]) * lxlylz_factorial_coef([lx2, ly2, lz2])
+                        key = '_'.join(map(str, (l1, l2)))
+                        vec_dict.setdefault(key, []).append(
+                            ([ [lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3] ], prefactor)
+                        )
+    return vec_dict
+##added
+def find_combo_vectors_nu4_str(l_max: int) -> Dict[str, List[Tuple[List[List[int]], int]]]:
+    vec_dict: Dict[str, List[Tuple[List[List[int]], int]]] = {}
+
+    for lx1, ly1, lz1 in itertools.product(range(l_max + 1), repeat=3):
+        l1 = lx1 + ly1 + lz1
+        if 0 < l1 <= l_max:
+            for lx2, ly2, lz2 in itertools.product(range(l_max + 1), repeat=3):
+                l2 = lx2 + ly2 + lz2
+                if l1 < l2 <= l_max:  # Ensuring l2 is strictly greater than l1
+                    for dx, dy, dz in itertools.product(range(l_max + 1), repeat=3):
+                        dl = dx + dy + dz
+                        if dl >= 1:
+                            lx3, ly3, lz3 = lx1 + dx, ly1 + dy, lz1 + dz
+                            lx4, ly4, lz4 = lx2 + dx, ly2 + dy, lz2 + dz
+                            if (lx3 + ly3 + lz3) <= l_max and (lx4 + ly4 + lz4) <= l_max:
+                                prefactor = (
+                                    lxlylz_factorial_coef([lx1, ly1, lz1]) *
+                                    lxlylz_factorial_coef([lx2, ly2, lz2]) *
+                                    lxlylz_factorial_coef([dx, dy, dz])
+                                )
+                                key = f"{l1}_{l2}_{dl}"
+                                vec_entry = (
+                                    [ [lx1, ly1, lz1], [lx2, ly2, lz2], [lx3, ly3, lz3], [lx4, ly4, lz4] ],
+                                    prefactor
+                                )
+                                vec_dict.setdefault(key, []).append(vec_entry)
+
+    return vec_dict

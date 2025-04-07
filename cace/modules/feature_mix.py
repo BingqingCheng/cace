@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict
+from typing import Dict, Optional
 
 __all__ = ['FeatureAdd', 'FeatureInteract']
 
@@ -16,7 +16,10 @@ class FeatureAdd(nn.Module):
         self.output_key = output_key
         self.model_outputs = [output_key]
 
-    def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor],
+                training:bool = None,
+                output_index: Optional[int]=None,
+                ) -> Dict[str, torch.Tensor]:
         feature_shape = data[self.feature_keys[0]].shape
         result = torch.zeros_like(data[self.feature_keys[0]])
         for feature_key in self.feature_keys:

@@ -4,6 +4,7 @@ from typing import List
 import numpy as np
 import torch
 from torch import Tensor
+from typing import Optional
 
 from .data import Data
 from .dataset import IndexType
@@ -17,14 +18,19 @@ class Batch(Data):
     :obj:`batch`, which maps each node to its respective graph identifier.
     """
 
-    def __init__(self, batch=None, ptr=None, **kwargs):
-        super().__init__(**kwargs)
-
-        for key, item in kwargs.items():
-            if key == "num_nodes":
-                self.__num_nodes__ = item
-            else:
-                self[key] = item
+    def __init__(self, 
+                 x: Optional[Tensor] = None, 
+                 edge_index: Optional[Tensor] = None, 
+                 edge_attr: Optional[Tensor] = None, 
+                 y: Optional[Tensor] = None, 
+                 pos: Optional[Tensor] = None,
+                 normal: Optional[Tensor] = None,
+                 face: Optional[Tensor] = None,
+                 num_nodes: Optional[int] = None,
+                 batch: Optional[Tensor] = None, 
+                 ptr: Optional[Tensor] = None):
+        Data.__init__(self, x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, num_nodes=num_nodes,
+            pos=pos, normal=normal, face=face)
 
         self.batch = batch
         self.ptr = ptr
@@ -45,9 +51,9 @@ class Batch(Data):
         Will exclude any keys given in :obj:`exclude_keys`."""
 
         # this is for the competibility of different pytorch versions
-        try:
+        if hasattr(data_list[0], 'keys'):
             keys = list(set(data_list[0].keys) - set(exclude_keys))
-        except:
+        else:
             keys = list(set(data_list[0].keys()) - set(exclude_keys))
         assert "batch" not in keys and "ptr" not in keys
 
