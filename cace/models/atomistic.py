@@ -58,12 +58,8 @@ class AtomisticModel(nn.Module):
         self, data: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         for p in self.required_derivatives:
-            if isinstance(data, torch_geometric.Batch): 
-                if p in data.to_dict().keys():
-                    data[p].requires_grad_(True)
-            else:
-                if p in data.keys():
-                    data[p].requires_grad_(True)
+            if p in data.keys():
+                data[p].requires_grad_(True)
         return data
 
     def initialize_transforms(self, datamodule):
@@ -154,7 +150,7 @@ class NeuralNetworkPotential(AtomisticModel):
                 training: bool = False, 
                 compute_stress: bool = True, 
                 compute_virials: bool = False,
-                output_index: int = None, # only used for multiple-head output
+                output_index: Optional[int] = None, # only used for multiple-head output
                 ) -> Dict[str, torch.Tensor]:
         # initialize derivatives for response properties
         data = self.initialize_derivatives(data)
@@ -166,6 +162,8 @@ class NeuralNetworkPotential(AtomisticModel):
 
         if self.representation is not None:
             data = self.representation(data)
+
+        ###
 
         for m in self.output_modules:
             if hasattr(self, "keep_graph"):

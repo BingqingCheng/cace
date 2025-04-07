@@ -1,8 +1,12 @@
 import torch
 import torch.nn as nn
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 __all__ = ['CombinePotential']
+
+# @torch.jit.script
+def default_operation(my_list: List[torch.Tensor]) -> torch.Tensor:
+    return torch.stack(my_list).sum(0)
 
 class CombinePotential(nn.Module):
     def __init__(
@@ -45,12 +49,9 @@ class CombinePotential(nn.Module):
 
         if operation is None:
             # Default operation (sum)
-            self.operation = self.default_operation
+            self.operation = default_operation
         else:
             self.operation = operation
-
-    def default_operation(self, my_list):
-        return torch.stack(my_list).sum(0)
 
 
     def forward(self,
@@ -58,21 +59,27 @@ class CombinePotential(nn.Module):
                 training: bool = False,
                 compute_stress: bool = False,
                 compute_virials: bool = False,
-                output_index: int = None, # only used for multiple-head output
+                output_index: Optional[int] = None, # only used for multiple-head output
                 ) -> Dict[str, torch.Tensor]:
-        results = {}
-        output = {}
+        results: Dict[str, Dict[str, torch.Tensor]] = torch.jit.annotate(
+            Dict[str, Dict[str, torch.Tensor]], {}
+        )
+        output: Dict[str, torch.Tensor] = torch.jit.annotate(
+            Dict[str, torch.Tensor], {}
+        )
         for i, potential in enumerate(self.models):
             result = potential(data, training, compute_stress, compute_virials, output_index)
-            results[i] = result
-            output.update(result)
+            results[str(i)] = result
+            for k, v in result.items():
+                output[k] = v
 
         for key in self.out_keys:
             values = []
             for i, potential_key in enumerate(self.potential_keys):
-                v_now = results[i][potential_key[key]]
+                v_now = results[str(i)][potential_key[key]]
                 if 'weight' in potential_key:
-                    v_now *= potential_key['weight']
+                    weight = float(potential_key['weight'])
+                    v_now *= weight
                 values.append(v_now)
             if values:
                 output[key] = self.operation(values)

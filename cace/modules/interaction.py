@@ -239,7 +239,7 @@ class MessageBchi(nn.Module):
         else:
             assert self.n_in == features.shape[1]
 
-        if self.hnet == None:
+        if self.hnet is None:
             if self.shared_channels:
                 n_out = 1
             else:

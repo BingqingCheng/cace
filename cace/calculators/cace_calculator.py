@@ -42,6 +42,7 @@ class CACECalculator(Calculator):
         keep_neutral: bool = True, # to keep BEC sum to be neutral
         atomic_energies: dict = None,
         output_index: int = None, # only used for multi-output models
+        cutoff: float = None, #only for combined potential
         **kwargs,
         ):
 
@@ -67,10 +68,16 @@ class CACECalculator(Calculator):
         self.length_units_to_A = length_units_to_A
         self.electric_field_unit = electric_field_unit
 
-        try:
+        
+
+        if hasattr(self.model, "representation"):
             self.cutoff = self.model.representation.cutoff
-        except AttributeError:
-            self.cutoff = self.model.models[0].representation.cutoff
+        elif hasattr(self.model, "models"):
+            if cutoff is not None:
+                self.cutoff = cutoff
+            else:
+                self.cutoff = self.model.models[0].representation.cutoff
+            
 
         self.atomic_energies = atomic_energies
 

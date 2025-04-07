@@ -4,8 +4,12 @@ import numpy as np
 from .angular_tools import (
     find_combo_vectors_nu2,
     find_combo_vectors_nu3,
-    find_combo_vectors_nu4
+    find_combo_vectors_nu4,
+    find_combo_vectors_nu2_str,
+    find_combo_vectors_nu3_str,
+    find_combo_vectors_nu4_str,
     )
+from typing import List, Dict, Tuple
 
 __all__ = ['Symmetrizer', 'Symmetrizer_JIT', 'Symmetrizer_Tensor']
 
@@ -94,8 +98,28 @@ class Symmetrizer_JIT(nn.Module):
     def _get_index_from_l_list(self, lxlylz: torch.Tensor) -> int:
         return torch.where((self.l_list_tensor == lxlylz).all(dim=1))[0][0].item()
 
+#added for mapping indices to strings
+def int_to_str(n: int) -> str:
+    if n == 0:
+        return '0'
+    DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+    s = ''
+    while n > 0:
+        digit = n % 10
+        s = DIGITS[digit] + s
+        n = n // 10
+    return s
+def list_of_ints_to_str(lst: List[int]) -> str:
+    s = ''
+    for n in lst:
+        s += int_to_str(n) + '_'
+    return s[:-1] 
 
 class Symmetrizer(nn.Module):
+    l_list_indices: Dict[str, int]
+    indice_dict_allnu: Dict[int, Dict[str, List[Tuple[List[int], int]]]]
+    indices_initialized: bool
+    vec_dict_allnu: Dict[int, Dict[str, List[Tuple[List[List[int]], int]]]]
     def __init__(self, max_nu: int, max_l: int, l_list: list):
         super().__init__()
         if max_nu >= 5:
@@ -107,41 +131,45 @@ class Symmetrizer(nn.Module):
         # Convert elements of l_list to tuples for dictionary keys
         l_list_tuples = [tuple(l) for l in l_list]
         # Create a dictionary to map tuple to index
-        self.l_list_indices = {l_tuple: i for i, l_tuple in enumerate(l_list_tuples)}
+        self.l_list_indices = {l_str: i for i, l_str in enumerate(l_list)} #revised
 
         if max_nu > 4:
             raise NotImplementedError("max_nu > 4 is not supported yet.")
         self.vec_dict_allnu = {}
         if max_nu >= 2:
-            self.vec_dict_allnu[2]  = find_combo_vectors_nu2(self.max_l)[0]
+            self.vec_dict_allnu[2]  = find_combo_vectors_nu2_str(self.max_l) #revised
         if max_nu >= 3:
-            self.vec_dict_allnu[3]  = find_combo_vectors_nu3(self.max_l)[0]
+            self.vec_dict_allnu[3]  = find_combo_vectors_nu3_str(self.max_l) #revised
         if max_nu == 4:
-            self.vec_dict_allnu[4]  = find_combo_vectors_nu4(self.max_l)[0]
+            self.vec_dict_allnu[4]  = find_combo_vectors_nu4_str(self.max_l) #revised
 
-        self.indice_dict_allnu = None 
+        self.indice_dict_allnu = {nu: {} for nu in range(2, self.max_nu + 1)}
+        self.indices_initialized = False # added, make a flag to check if indices are initialized
         self._get_indices_allnu()
 
     def _get_indices_allnu(self):
-        self.indice_dict_allnu = {}
+        # self.indice_dict_allnu = {}
         for nu in range(2, self.max_nu + 1):
-            self.indice_dict_allnu[nu] = {}
+            self.indice_dict_allnu[nu].clear() #Revised
             for i, (l_key, lxlylz_list) in enumerate(self.vec_dict_allnu[nu].items()):
-                self.indice_dict_allnu[nu][l_key] = []
+                l_key_str = str(l_key)
+                if l_key_str not in self.indice_dict_allnu[nu]:
+                    self.indice_dict_allnu[nu][l_key_str] = torch.jit.annotate(List[Tuple[List[int], int]], [])
                 for item in lxlylz_list:
                     prefactor = item[-1]
-                    indices = [self.l_list_indices[tuple(lxlylz)] for lxlylz in item[:-1]]
+                    indices = [self.l_list_indices[list_of_ints_to_str(lxlylz)] for lxlylz in item[0]]
+                    assert isinstance(indices, list) and all(isinstance(i, int) for i in indices), "Indices must be a list of ints"
+                    assert isinstance(prefactor, int), "Prefactor must be an int"
                     # append to the dictionary
-                    self.indice_dict_allnu[nu][l_key].append([indices, prefactor])
+                    self.indice_dict_allnu[nu][l_key_str].append((indices, prefactor)) #revised
 
     def forward(self, node_attr: torch.Tensor):
-        try:
-            self.indice_dict_allnu
-        except AttributeError:
-           self._get_indices_allnu()
+        if not self.indices_initialized: #added
+            self._get_indices_allnu()
+            self.indices_initialized = True # flag to indicate that indices are initialized
 
         num_nodes, n_radial, _, n_chanel = node_attr.size()
-        n_angular_sym = 1 + np.sum([len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1)])
+        n_angular_sym = 1 + sum([len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1)]) #revised
         sym_node_attr = torch.zeros((num_nodes, n_radial, n_angular_sym, n_chanel),
                                     dtype=node_attr.dtype, device=node_attr.device)
 
@@ -150,9 +178,9 @@ class Symmetrizer(nn.Module):
         n_sym_node_attr = 1
 
         for nu in range(2, self.max_nu + 1):
-            for i, (_, indices_list) in enumerate(self.indice_dict_allnu[nu].items()):
+            for i, (key, indices_list) in enumerate(self.indice_dict_allnu[nu].items()): #revised changing '_' to 'key' to avoid mutliple uses of variable
                 for item in indices_list:
-                    indices, prefactor = item[0], item[-1]
+                    indices, prefactor = item #revised for tuple
                     product = torch.prod(node_attr[:, :, indices, :], dim=2)
                     # somehow MPS doesn't like torch.prod, as it uses cumprod during autograd.
                     # one can use the following:

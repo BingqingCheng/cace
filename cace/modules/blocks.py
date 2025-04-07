@@ -132,13 +132,14 @@ class Dense(nn.Module):
             self.activation = nn.Identity()
 
         # Batch normalization layer
-        if self.use_batchnorm:
-            self.batchnorm = nn.BatchNorm1d(out_features)
+        self.batchnorm = nn.BatchNorm1d(out_features) if use_batchnorm else nn.Identity() #revised, all properties should be defined
+
 
     def forward(self, input: torch.Tensor):
         y = self.linear(input)
-        if self.use_batchnorm:
-            y = self.batchnorm(y)
+        # if self.use_batchnorm:
+        #     y = self.batchnorm(y)
+        y = self.batchnorm(y)
         y = self.activation(y)
         return y
 

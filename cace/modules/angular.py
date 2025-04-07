@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from math import factorial
 from collections import OrderedDict
+from typing import Dict, List
 
 __all__=['AngularComponent', 'AngularComponent_GPU', 'make_lxlylz_list', 'make_lxlylz', 'make_l_dict', 'l_dict_to_lxlylz_list', 'compute_length_lxlylz', 'compute_length_lmax', 'compute_length_lmax_numerical', 'lxlylz_factorial_coef', 'lxlylz_factorial_coef_torch', 'l1l2_factorial_coef']
 
@@ -25,17 +26,18 @@ class AngularComponent(nn.Module):
         self.precompute_lxlylz()
 
     def precompute_lxlylz(self):
-        self.lxlylz_dict = OrderedDict({l: [] for l in range(self.l_max + 1)})
-        self.lxlylz_dict[0] = [(0, 0, 0)]
+        self.lxlylz_dict: Dict[int, List[str]] = OrderedDict({l: [] for l in range(self.l_max + 1)}) #revised
+        self.lxlylz_dict[0] = ["0_0_0"] #revised
         for l in range(1, self.l_max + 1):
             for prev_lxlylz_combination in self.lxlylz_dict[l - 1]:
+                lxlylz = list(map(int, prev_lxlylz_combination.split('_'))) #revised, string to list
                 for i in range(3):
-                    lxlylz_combination = list(prev_lxlylz_combination)
+                    lxlylz_combination = lxlylz.copy()
                     lxlylz_combination[i] += 1
-                    lxlylz_combination_tuple = tuple(lxlylz_combination)
-                    if lxlylz_combination_tuple not in self.lxlylz_dict[l]:
-                        self.lxlylz_dict[l].append(lxlylz_combination_tuple)
-        self.lxlylz_list = self._convert_lxlylz_to_list()
+                    lxlylz_combination_str = "_".join(map(str, lxlylz_combination))  # revised, list to string
+                    if lxlylz_combination_str not in self.lxlylz_dict[l]:
+                        self.lxlylz_dict[l].append(lxlylz_combination_str) #revised
+        self.lxlylz_list: List(str) = self._convert_lxlylz_to_list() #revised
         # get the start and the end index of the lxlylz_list for each l
         self.lxlylz_index = torch.zeros((self.l_max+1, 2), dtype=torch.long)
         for l in range(self.l_max+1):
@@ -44,13 +46,25 @@ class AngularComponent(nn.Module):
 
     def forward(self, vectors: torch.Tensor) -> torch.Tensor:
 
-        computed_values = {(0, 0, 0): torch.ones(vectors.size(0), device=vectors.device, dtype=vectors.dtype)}
+        computed_values: Dict[str, torch.Tensor] = {"0_0_0": torch.ones(vectors.size(0), device=vectors.device, dtype=vectors.dtype)} #revised
         for l in range(1, self.l_max + 1):
             for lxlylz_combination in self.lxlylz_dict[l]:
-                prev_lxlylz_combination = tuple(l - 1 if i == lxlylz_combination.index(max(lxlylz_combination)) else l for i, l in enumerate(lxlylz_combination))
-                i = lxlylz_combination.index(max(lxlylz_combination))
-                computed_values[lxlylz_combination] = computed_values[prev_lxlylz_combination] * vectors[:, i]
+                parts: List[int] = []
+                current_num = ''
+                for c in lxlylz_combination:
+                    if c == '_':
+                        parts.append(int(current_num))
+                        current_num = ''
+                    else:
+                        current_num += c
+                parts.append(int(current_num))  # add the last number
 
+                max_val = max(parts)
+                i = parts.index(max_val)
+                parts[i] -= 1
+                prev_key = f"{parts[0]}_{parts[1]}_{parts[2]}" # key in string format
+                current_key = lxlylz_combination
+                computed_values[current_key] = computed_values[prev_key] * vectors[:, i]
         computed_values_list = self._convert_computed_values_to_list(computed_values)
         return torch.stack(computed_values_list, dim=1)
 
@@ -60,13 +74,21 @@ class AngularComponent(nn.Module):
             lxlylz_list.extend(combinations)
         return lxlylz_list
 
-    def _convert_computed_values_to_list(self, computed_values):
+    def _convert_computed_values_to_list(self, 
+                                         computed_values: Dict[str, torch.Tensor]
+                                         ) -> List[torch.Tensor]:
         return [computed_values[comb] for comb in self.lxlylz_list]
 
     def get_lxlylz_list(self):
         if self.lxlylz_list is None:
             raise ValueError("You must call forward before getting lxlylz_list")
         return self.lxlylz_list
+     ##added##
+    def get_lxlylz_list_str(self):
+        if self.lxlylz_list is None:
+            raise ValueError("You must call forward before getting lxlylz_list")
+        string_list = ['_'.join(map(str, tpl)) for tpl in self.lxlylz_list ]
+        return string_list
 
     def get_lxlylz_dict(self):
         return self.lxlylz_dict
@@ -139,6 +161,18 @@ def make_lxlylz(l):
             if lz >= 0:
                 lxlylz.append([lx, ly, lz])
     #return torch.tensor(lxlylz, dtype=torch.int64)
+    return lxlylz
+
+def make_lxlylz_str(l):
+    """
+    make a list of lxlylz such that lx + ly + lz = l
+    """
+    lxlylz = []
+    for lx in range(l+1):
+        for ly in range(l+1):
+            lz = l - lx - ly
+            if lz >= 0:
+                lxlylz.append('_'.join(map(str, tuple([lx, ly, lz]))))
     return lxlylz
 
 def make_l_dict(l_max):
