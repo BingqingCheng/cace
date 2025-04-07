@@ -33,7 +33,7 @@ class EvaluateTask(nn.Module):
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
-        other_keys: list = None,
+        other_keys: list = [],
         atomic_energies: dict = None,
         ):
 
