@@ -12,14 +12,39 @@ class LesWrapper(nn.Module):
     """
     def __init__(self,
                  feature_key: Union[str, Sequence[int]] = 'node_feats',
-                 output_key: str = 'LES_energy'):
+                 energy_key: str = 'LES_energy',
+                 charge_key: str = 'LES_charge',
+                 bec_key: str = 'LES_BEC',
+                 compute_energy: bool = True,
+                 compute_bec: bool = False,
+                 bec_output_index: int = None, # option to compute BEC along one axis
+                 ):
         super().__init__()
         from les import Les
         self.les = Les(les_arguments={})
  
         self.feature_key = feature_key
-        self.output_key = output_key
-        self.model_outputs = [output_key]
+        self.energy_key = energy_key
+        self.charge_key = charge_key
+        self.bec_key = bec_key
+        self.bec_output_index = bec_output_index
+
+        self.compute_energy = compute_energy        
+        self.compute_bec = compute_bec
+        self.model_outputs = [charge_key]
+        if compute_energy:
+            self.model_outputs.append(energy_key)
+        if compute_bec:
+            self.model_outputs.append(bec_key)
+
+    def set_compute_energy(self, compute_energy: bool):
+        self.compute_energy = compute_energy
+
+    def set_compute_bec(self, compute_bec: bool):
+        self.compute_bec = compute_bec
+
+    def set_bec_output_index(self, bec_output_index: int):
+        self.bec_output_index = bec_output_index
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
 
@@ -36,9 +61,14 @@ class LesWrapper(nn.Module):
             positions=data['positions'],
             cell=data['cell'].view(-1, 3, 3),
             batch=data["batch"],
-            compute_bec=False,
-            bec_output_index=None,
+            compute_energy=self.compute_energy,
+            compute_bec=self.compute_bec,
+            bec_output_index=self.bec_output_index,
             )
 
-        data[self.output_key] = result['E_lr']
+        data[self.charge_key] = result['latent_charges']
+        if self.compute_energy:
+            data[self.energy_key] = result['E_lr']
+        if self.compute_bec:
+            data[self.bec_key] = result['BEC']
         return data
