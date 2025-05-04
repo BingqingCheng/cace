@@ -12,7 +12,7 @@ class EwaldPotential(nn.Module):
                  external_field = None, # external field
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z
                  charge_neutral_lambda: float = None,
-                 remove_self_interaction=False,
+                 remove_self_interaction=True,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
                  aggregation_mode: str = "sum",
