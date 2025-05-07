@@ -44,6 +44,8 @@ class EwaldPotential(nn.Module):
             self.model_outputs.append(feature_key+'_field')
 
         self.charge_neutral_lambda = charge_neutral_lambda
+        self.required_derivatives = []
+        self.required_derivatives.append('cell')
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:

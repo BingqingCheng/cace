@@ -36,8 +36,8 @@ class LesWrapper(nn.Module):
             self.model_outputs.append(energy_key)
         if compute_bec:
             self.model_outputs.append(bec_key)
-        if self.calc_forces or self.calc_stress:
-            self.required_derivatives.append('cell')
+        self.required_derivatives = []
+        self.required_derivatives.append('cell')
 
     def set_compute_energy(self, compute_energy: bool):
         self.compute_energy = compute_energy
