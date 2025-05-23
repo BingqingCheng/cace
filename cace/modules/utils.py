@@ -142,7 +142,7 @@ def get_symmetric_displacement(
         unit_shifts,
         cell[batch[sender]],
     )
-    return positions, shifts, displacement
+    return positions, shifts, displacement, cell
 
 def get_outputs(
     energy: torch.Tensor,

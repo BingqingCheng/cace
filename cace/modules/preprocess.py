@@ -24,6 +24,7 @@ class Preprocess(nn.Module):
                 data["positions"],
                 data["shifts"],
                 data["displacement"],
+                data["cell"]
             ) = get_symmetric_displacement(
                 positions=data["positions"],
                 unit_shifts=data["unit_shifts"],
