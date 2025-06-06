@@ -64,11 +64,9 @@ class MetalWall(nn.Module):
             
             metal_index = (atomic_numbers == self.metal_atomic_numbers)
             electrode_index = ~metal_index
-            
         
             # get the A matrix
             r = r_now[metal_index, :]
-            cell = data['cell']
 
             # if the positions of metal atoms haven't changed, we use the stored S matrix
             if self.S is None or not torch.allclose(self.r, r):
@@ -110,7 +108,7 @@ class MetalWall(nn.Module):
         A_inv = torch.inverse(A_mat)
 
         # Define E as a column vector of ones
-        E = torch.ones(N, 1)
+        E = torch.ones(N, 1, device=r.device)
 
         # Compute the scalar denominator: E^T A^{-1} E
         denom = E.T @ A_inv @ E  # shape: (1, 1)
