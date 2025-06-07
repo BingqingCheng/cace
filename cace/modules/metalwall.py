@@ -14,6 +14,7 @@ class MetalWall(nn.Module):
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z\
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
+                 adjust_neutrality: bool = True,
                  ):
         super().__init__()
         self.ep = EwaldPotential(dl=dl,
@@ -31,11 +32,15 @@ class MetalWall(nn.Module):
         
         self.feature_key = feature_key
         self.output_key = output_key
+        self.adjust_neutrality = adjust_neutrality
         
         self.model_outputs = [output_key]
         
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
-        
+       
+        if not hasattr(self, adjust_neutrality):
+            self.adjust_neutrality = False
+
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
             batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=data['positions'].device)
@@ -67,7 +72,11 @@ class MetalWall(nn.Module):
        
             if metal_index.sum() == 0:
                 # If there are no metal atoms, we just return the original charges
-                results.append(q_now.clone())
+                q_combined = q_now.clone()
+                if self.adjust_neutrality:
+                    # Adjust the charge of the metal atoms to ensure neutrality
+                    q_combined[electrode_index] = q_combined[electrode_index] - q_combined[electrode_index].sum() / electrode_index.sum()
+                results.append(q_combined)
             else:
                 # get the A matrix
                 r = r_now[metal_index, :]
@@ -78,6 +87,9 @@ class MetalWall(nn.Module):
                     self.r = r.detach()
 
                 q_combined = q_now.clone()
+                if self.adjust_neutrality:
+                    # Adjust the charge of the metal atoms to ensure neutrality
+                    q_combined[electrode_index] = q_combined[electrode_index] - q_combined[electrode_index].sum() / electrode_index.sum()
                 q_combined[metal_index] = 0.0
                 _, f_now = self.ep.compute_potential_triclinic(r_now, 
                                                            q_combined, 
