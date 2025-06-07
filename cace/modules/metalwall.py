@@ -38,7 +38,7 @@ class MetalWall(nn.Module):
         
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
        
-        if not hasattr(self, adjust_neutrality):
+        if not hasattr(self, 'adjust_neutrality'):
             self.adjust_neutrality = False
 
         if data["batch"] is None:
