@@ -64,27 +64,30 @@ class MetalWall(nn.Module):
             
             metal_index = (atomic_numbers == self.metal_atomic_numbers)
             electrode_index = ~metal_index
-        
-            # get the A matrix
-            r = r_now[metal_index, :]
+       
+            if metal_index.sum() == 0:
+                # If there are no metal atoms, we just return the original charges
+                results.append(q_now.clone())
+            else:
+                # get the A matrix
+                r = r_now[metal_index, :]
 
-            # if the positions of metal atoms haven't changed, we use the stored S matrix
-            if self.S is None or not torch.allclose(self.r, r):
-                self.S = self._compute_S_matrix(r.detach(), cell.detach())
-                self.r = r.detach()
+                # if the positions of metal atoms haven't changed, we use the stored S matrix
+                if self.S is None or not torch.allclose(self.r, r):
+                    self.S = self._compute_S_matrix(r.detach(), cell.detach())
+                    self.r = r.detach()
 
-
-            q_combined = q_now.clone()
-            q_combined[metal_index] = 0.0
-            _, f_now = self.ep.compute_potential_triclinic(r_now, 
+                q_combined = q_now.clone()
+                q_combined[metal_index] = 0.0
+                _, f_now = self.ep.compute_potential_triclinic(r_now, 
                                                            q_combined, 
                                                            cell, 
                                                            compute_field=True)
-            B_mat = f_now[metal_index, :] * -1.
+                B_mat = f_now[metal_index, :] * -1.
 
-            q_mw = q_combined.clone()
-            q_mw[metal_index] = self.S @ B_mat
-            results.append(q_mw)
+                q_mw = q_combined.clone()
+                q_mw[metal_index] = self.S @ B_mat
+                results.append(q_mw)
             
         data[self.output_key] = torch.cat(results, dim=0)
         
