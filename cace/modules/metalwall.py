@@ -14,7 +14,7 @@ class MetalWall(nn.Module):
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z\
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
-                 adjust_neutrality: bool = True,
+                 adjust_neutrality: bool = False,
                  ):
         super().__init__()
         self.ep = EwaldPotential(dl=dl,
@@ -32,12 +32,11 @@ class MetalWall(nn.Module):
         
         self.feature_key = feature_key
         self.output_key = output_key
-        self.adjust_neutrality = adjust_neutrality
-        
+        self.adjust_neutrality = adjust_neutrality        
         self.model_outputs = [output_key]
         
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
-       
+        
         if not hasattr(self, 'adjust_neutrality'):
             self.adjust_neutrality = False
 
@@ -59,8 +58,13 @@ class MetalWall(nn.Module):
         assert d == 3, 'r dimension error'
         assert n == q_all.size(0), 'q dimension error'
         
+
+        # set the charges to all metal elements to zero
+        all_metal_index = (atomic_numbers_all == self.metal_atomic_numbers)
+        q_all[all_metal_index] = 0.0
+
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
-                    
+                            
         results = []
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
@@ -71,11 +75,11 @@ class MetalWall(nn.Module):
             electrode_index = ~metal_index
        
             if metal_index.sum() == 0:
-                # If there are no metal atoms, we just return the original charges
                 q_combined = q_now.clone()
                 if self.adjust_neutrality:
                     # Adjust the charge of the metal atoms to ensure neutrality
                     q_combined[electrode_index] = q_combined[electrode_index] - q_combined[electrode_index].sum() / electrode_index.sum()
+                # If there are no metal atoms, we just return the original charges
                 results.append(q_combined)
             else:
                 # get the A matrix
@@ -86,18 +90,17 @@ class MetalWall(nn.Module):
                     self.S = self._compute_S_matrix(r.detach(), cell.detach())
                     self.r = r.detach()
 
-                q_combined = q_now.clone()
                 if self.adjust_neutrality:
                     # Adjust the charge of the metal atoms to ensure neutrality
-                    q_combined[electrode_index] = q_combined[electrode_index] - q_combined[electrode_index].sum() / electrode_index.sum()
-                q_combined[metal_index] = 0.0
+                    q_now[electrode_index] = q_now[electrode_index] - q_now[electrode_index].sum() / electrode_index.sum()
+
                 _, f_now = self.ep.compute_potential_triclinic(r_now, 
-                                                           q_combined, 
+                                                           q_now, 
                                                            cell, 
                                                            compute_field=True)
                 B_mat = f_now[metal_index, :] * -1.
 
-                q_mw = q_combined.clone()
+                q_mw = q_now.clone()
                 q_mw[metal_index] = self.S @ B_mat
                 results.append(q_mw)
             
@@ -109,15 +112,10 @@ class MetalWall(nn.Module):
 
     def _compute_S_matrix(self, r, cell):
         N = len(r)
-        #A_mat = torch.zeros((N, N), device=r.device)
-        #for i in range(N):
-        #    q_trail = torch.zeros(N)
-        #    q_trail[i] = 1.
-        #    _, f_now = self.ep.compute_potential_triclinic(r, q_trail.unsqueeze(1), cell, compute_field=True)
-        #    A_mat[i, :] = f_now[:, 0]
         q_eye = torch.eye(N, device=r.device)
         box = cell.view(3, 3).diagonal(dim1=-2, dim2=-1)
         _, A_mat = self.ep.compute_potential_optimized(r, q_eye, box, compute_field=True)
+        # somehow the triclinic version is not working!!
         #_, A_mat = self.ep.compute_potential_triclinic(r, q_eye, cell, compute_field=True)
             
         A_inv = torch.inverse(A_mat)
