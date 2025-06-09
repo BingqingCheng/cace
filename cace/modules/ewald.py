@@ -398,7 +398,9 @@ class EwaldPotential(nn.Module):
         # Compute structure factor S(k), Σq*e^(ikr)
         k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
         exp_ikr = torch.exp(1j * k_dot_r)
-        S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
+        if q.dim() == 1:       
+            q = q.unsqueeze(1)   
+        S_k = (q.unsqueeze(2) * exp_ikr.unsqueeze(1)).sum(dim=0) #[n_q, M]
 
         # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
         if self.exponent == 1:
@@ -413,17 +415,19 @@ class EwaldPotential(nn.Module):
         
         # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
-        pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
+        pot = (factors * kfac * torch.abs(S_k)**2).sum(dim=1) / volume   # [n_q]
         
         # Compute electric field if needed
         q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
         if compute_field:
-            sk_field = 2 * kfac * torch.conj(S_k)
-            q_field = (factors * torch.real(exp_ikr * sk_field)).sum(dim=1) / volume
+            sk_field = 2 * kfac * torch.conj(S_k)                               # [n_q, M]
+            q_field = (factors * torch.real(exp_ikr.unsqueeze(1)                # [N,1,M]
+                                            * sk_field.unsqueeze(0)))           # [1,n_q,M]
+            q_field = q_field.sum(dim=2) / volume                               # [N,n_q]
 
         # Remove self-interaction if applicable
         if self.remove_self_interaction and self.exponent == 1:
-            pot -= torch.sum(q**2) / (self.sigma * (2 * torch.pi)**1.5)
-            q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))
+            pot -= torch.sum(q**2) / (self.sigma * (2*torch.pi)**1.5)
+            q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))         # [N,n_q]
 
         return pot.unsqueeze(0) * self.norm_factor, q_field.unsqueeze(1) * self.norm_factor
