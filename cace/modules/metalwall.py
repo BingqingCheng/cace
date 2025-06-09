@@ -113,10 +113,7 @@ class MetalWall(nn.Module):
     def _compute_S_matrix(self, r, cell):
         N = len(r)
         q_eye = torch.eye(N, device=r.device)
-        box = cell.view(3, 3).diagonal(dim1=-2, dim2=-1)
-        _, A_mat = self.ep.compute_potential_optimized(r, q_eye, box, compute_field=True)
-        # somehow the triclinic version is not working!!
-        #_, A_mat = self.ep.compute_potential_triclinic(r, q_eye, cell, compute_field=True)
+        _, A_mat = self.ep.compute_potential_triclinic(r, q_eye, cell, compute_field=True)
             
         A_inv = torch.inverse(A_mat)
 
