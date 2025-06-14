@@ -15,6 +15,7 @@ class MetalWall(nn.Module):
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
                  adjust_neutrality: bool = False,
+                 scaling_factor: float = 1.0
                  ):
         super().__init__()
         self.ep = EwaldPotential(dl=dl,
@@ -34,11 +35,14 @@ class MetalWall(nn.Module):
         self.output_key = output_key
         self.adjust_neutrality = adjust_neutrality        
         self.model_outputs = [output_key]
+        self.scaling_factor = scaling_factor
         
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         
         if not hasattr(self, 'adjust_neutrality'):
             self.adjust_neutrality = False
+        if not hasattr(self, 'scaling_factor'):
+            self.scaling_factor = 1.0
 
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -72,13 +76,13 @@ class MetalWall(nn.Module):
             r_now, q_now, atomic_numbers, cell = r_all[mask], q_all[mask], atomic_numbers_all[mask], box_all[i]
             
             metal_index = (atomic_numbers == self.metal_atomic_numbers)
-            electrode_index = ~metal_index
+            electrolyte_index = ~metal_index
        
             if metal_index.sum() == 0:
                 q_combined = q_now.clone()
                 if self.adjust_neutrality:
-                    # Adjust the charge of the metal atoms to ensure neutrality
-                    q_combined[electrode_index] = q_combined[electrode_index] - q_combined[electrode_index].sum() / electrode_index.sum()
+                    # Adjust the charge of the electrolyte atoms to ensure neutrality
+                    q_combined[electrolyte_index] = q_combined[electrolyte_index] - q_combined[electrolyte_index].sum() / electrolyte_index.sum()
                 # If there are no metal atoms, we just return the original charges
                 results.append(q_combined)
             else:
@@ -92,7 +96,7 @@ class MetalWall(nn.Module):
 
                 if self.adjust_neutrality:
                     # Adjust the charge of the metal atoms to ensure neutrality
-                    q_now[electrode_index] = q_now[electrode_index] - q_now[electrode_index].sum() / electrode_index.sum()
+                    q_now[electrolyte_index] = q_now[electrolyte_index] - q_now[electrolyte_index].sum() / electrolyte_index.sum()
 
                 _, f_now = self.ep.compute_potential_triclinic(r_now, 
                                                            q_now, 
@@ -101,7 +105,7 @@ class MetalWall(nn.Module):
                 B_mat = f_now[metal_index, :] * -1.
 
                 q_mw = q_now.clone()
-                q_mw[metal_index] = self.S @ B_mat
+                q_mw[metal_index] = self.S @ B_mat * self.scaling_factor
                 results.append(q_mw)
             
         data[self.output_key] = torch.cat(results, dim=0)
