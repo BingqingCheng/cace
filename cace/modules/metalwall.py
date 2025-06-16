@@ -11,7 +11,7 @@ class MetalWall(nn.Module):
                  dl=1.,  # grid resolution
                  sigma=1/1.805132,  # width of the Gaussian on each atom
                  external_field = None, # external field
-                 external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z\
+                 external_field_direction: int = 2, # external field direction, 0 for x, 1 for y, 2 for z\
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
                  adjust_neutrality: bool = False,
@@ -36,6 +36,9 @@ class MetalWall(nn.Module):
         self.adjust_neutrality = adjust_neutrality        
         self.model_outputs = [output_key]
         self.scaling_factor = scaling_factor
+
+        self.external_field = external_field
+        self.external_field_direction = external_field_direction
         
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         
@@ -102,7 +105,18 @@ class MetalWall(nn.Module):
                                                            q_now, 
                                                            cell, 
                                                            compute_field=True)
-                B_mat = f_now[metal_index, :] * -1.
+
+                if self.external_field is not None:
+                    # wrap in box
+                    lz = cell[self.external_field_direction, self.external_field_direction]
+                    r_wrap = r[:, self.external_field_direction] / lz
+                    r_wrap =  r_wrap - torch.round(r_wrap)
+                    r_wrap = r_wrap * lz
+                    B_ext = self.external_field * r_wrap
+                else:
+                    B_ext = torch.zeros_like(r[:, self.external_field_direction])
+
+                B_mat = f_now[metal_index, :] * -1. + B_ext.unsqueeze(1)
 
                 q_mw = q_now.clone()
                 q_mw[metal_index] = self.S @ B_mat * self.scaling_factor
