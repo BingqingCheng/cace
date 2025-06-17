@@ -113,9 +113,8 @@ class MetalWall(nn.Module):
 
                 if self.external_field is not None:
                     lz = cell[self.external_field_direction, self.external_field_direction]
-                    #r_rel = r[:, self.external_field_direction] - lz / 2
                     r_wrap = r[:, self.external_field_direction] / lz
-                    r_wrap =  r_wrap - torch.round(r_wrap)
+                    r_wrap = r_wrap - torch.round(r_wrap)
                     r_wrap = r_wrap * lz
                     B_ext = self.external_field * r_wrap
                 else:
