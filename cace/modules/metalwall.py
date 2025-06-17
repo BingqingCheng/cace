@@ -40,15 +40,22 @@ class MetalWall(nn.Module):
 
         self.external_field = external_field
         self.external_field_direction = external_field_direction
-        
-    def forward(self, data: Dict[str, torch.Tensor], **kwargs):
-        
+       
+    def _backward_compatibility(self): 
         if not hasattr(self, 'adjust_neutrality'):
             self.adjust_neutrality = False
         if not hasattr(self, 'scaling_factor'):
             self.scaling_factor = 1.0
         if not hasattr(self, 'A_mat'):
             self.A_mat = None
+        if not hasattr(self, 'external_field'):
+            self.external_field = None
+        if not hasattr(self, 'external_field_direction'):
+            self.external_field_direction = 2
+
+    def forward(self, data: Dict[str, torch.Tensor], **kwargs):
+
+        self._backward_compatibility()        
 
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -131,8 +138,6 @@ class MetalWall(nn.Module):
                 # the electrostatic energy of the electrode will be estimated as q^les_i*q^les_j/r_ij = q_i*q_j / (r_ij \epsilon_infty),
                 # but it's actually q_i*q_j / r_ij = (q^les_i*q^les_j/r_ij) * \epsilon_infty
                 # so we calculate the difference
-                #energy_corr = self.ep.compute_potential_triclinic(r, q_mw[metal_index], cell, compute_field=False)[0] * (1./self.scaling_factor - 1.0)
-                #print(energy_corr)
                 energy_corr = q_mw[metal_index].T @ self.A_mat @ q_mw[metal_index] * (self.scaling_factor**2. - 1) / 2.
                 energy_corr_results.append(energy_corr[0])
 
@@ -143,7 +148,6 @@ class MetalWall(nn.Module):
         
         return data
         
-
 
     def _compute_S_matrix(self, r, cell):
         N = len(r)
