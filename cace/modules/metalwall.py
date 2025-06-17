@@ -61,7 +61,7 @@ class MetalWall(nn.Module):
         q_all = data[self.feature_key]
         atomic_numbers_all = data['atomic_numbers']
         if q_all.dim() == 1:
-            q_all = q.unsqueeze(1)
+            q_all = q_all.unsqueeze(1)
 
         # Check the input dimension
         n, d = r_all.shape
