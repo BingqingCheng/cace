@@ -11,7 +11,7 @@ class MetalWall(nn.Module):
                  dl=1.,  # grid resolution
                  sigma=1/1.805132,  # width of the Gaussian on each atom
                  external_field = None, # external field
-                 external_field_direction: int = 2, # external field direction, 0 for x, 1 for y, 2 for z\
+                 external_field_direction: int = 2, # external field direction, 0 for x, 1 for y, 2 for z
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
                  adjust_neutrality: bool = False,
@@ -84,6 +84,7 @@ class MetalWall(nn.Module):
                             
         results = []
         energy_corr_results = []
+        energy_external_results = []
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
@@ -91,7 +92,7 @@ class MetalWall(nn.Module):
             
             metal_index = (atomic_numbers == self.metal_atomic_numbers)
             electrolyte_index = ~metal_index
-       
+
             if metal_index.sum() == 0:
                 q_combined = q_now.clone()
                 if self.adjust_neutrality:
@@ -100,6 +101,7 @@ class MetalWall(nn.Module):
                 # If there are no metal atoms, we just return the original charges
                 results.append(q_combined)
                 energy_corr_results.append(torch.zeros(1, device=q_now.device))
+                energy_external_results.append(torch.zeros(1, device=q_now.device))
             else:
                 # get the A matrix
                 r = r_now[metal_index, :]
@@ -119,6 +121,8 @@ class MetalWall(nn.Module):
                                                            compute_field=True)
 
                 if self.external_field is not None:
+                    # assumes that the metal electrodes are on the sides, and the electrolytes are in the middle
+                    energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_combined[electrolyte_index])
                     lz = cell[self.external_field_direction, self.external_field_direction]
                     r_wrap = r[:, self.external_field_direction] / lz
                     r_wrap = r_wrap - torch.round(r_wrap)
@@ -140,9 +144,12 @@ class MetalWall(nn.Module):
                 # so we calculate the difference
                 energy_corr = q_mw[metal_index].T @ self.A_mat @ q_mw[metal_index] * (self.scaling_factor**2. - 1) / 2.
                 energy_corr_results.append(energy_corr[0])
+                energy_external_results.append(energy_external)
+
 
         data[self.output_key] = torch.cat(results, dim=0)
         data['mw_energy_correction'] = torch.cat(energy_corr_results, dim=0)
+        data['mw_energy_external'] = torch.cat(energy_external_results, dim=0)
             
         data[self.output_key] = torch.cat(results, dim=0)
         
