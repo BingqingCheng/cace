@@ -122,7 +122,7 @@ class MetalWall(nn.Module):
 
                 if self.external_field is not None:
                     # assumes that the metal electrodes are on the sides, and the electrolytes are in the middle
-                    energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_all[electrolyte_index])
+                    energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_all[electrolyte_index]).unsqueeze(0)
                     lz = cell[self.external_field_direction, self.external_field_direction]
                     r_wrap = r[:, self.external_field_direction] / lz
                     r_wrap = r_wrap - torch.round(r_wrap)
