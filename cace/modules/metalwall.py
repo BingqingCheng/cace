@@ -121,7 +121,7 @@ class MetalWall(nn.Module):
                 B_ext = torch.zeros_like(r[:, self.external_field_direction])
 
                 # if the positions of metal atoms haven't changed, we use the stored S matrix
-                if self.S is None or self.A_mat is None or  not torch.allclose(self.r, r):
+                if self.S is None or self.A_mat is None or self.r.shape != r.shape  or not torch.allclose(self.r, r):
                     self.S = self._compute_S_matrix(r.detach(), cell.detach())
                     self.r = r.detach()
 
