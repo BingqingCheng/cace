@@ -344,11 +344,8 @@ class EwaldPotential(nn.Module):
 
     def add_external_field(self, r_raw, q, box, direction_index, external_field):
         external_field_norm_factor = (self.norm_factor/90.0474)**0.5
-        # wrap in box
-        r = r_raw[:, direction_index] / box[direction_index]
-        r =  r - torch.round(r)
-        r = r * box[direction_index]
-        return external_field * torch.sum(q * r.unsqueeze(1)) * external_field_norm_factor
+        r = r_raw[:, direction_index]
+        return - external_field * torch.sum(q * r.unsqueeze(1)) * external_field_norm_factor
 
     def change_external_field(self, external_field):
         self.external_field = external_field
