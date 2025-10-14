@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Union
 import torch
 import torch.nn as nn
 from .ewald import EwaldPotential
@@ -7,16 +7,18 @@ __all__ = ['MetalWallQEQ']
 
 class MetalWallQEQ(nn.Module):
     def __init__(self,
-                 metal_atomic_numbers: int,
-                 dl=1.,  # grid resolution
-                 sigma=1/1.805132,  # width of the Gaussian on each atom
+                 metal_atomic_numbers: Union[int, List[int]],  # atomic number of the metal atoms
+                 dl=2.0,  # grid resolution
+                 sigma=1.0, #1/1.805132, #1.0,  # width of the Gaussian on each atom
                  external_field = None, # external field
                  external_field_direction: int = 2, # external field direction, 0 for x, 1 for y, 2 for z
                  external_field_norm_factor: float = (1./90.0474)**0.5, # the standard normal factor in accordance with the cace convention used in ewald.py
                  external_field_on: bool = True, # whether to directly apply efield on non-metal atoms
                  external_field_potential_on: bool = True, # whether to explicitly enforce the potential drop of the electrode
                  feature_key: str = 'q',
+                 chi_key: str = None, # if None than all zero
                  output_key: str = 'q_mw',
+                 system_charge: Union[float, str] = 0.0,  # Key for system charge in data
                  scaling_factor: float = 1.0  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
                  ):
         super().__init__()
@@ -29,12 +31,25 @@ class MetalWallQEQ(nn.Module):
                     output_key=None,
                     compute_field=True)
         self.ep.model_outputs = []
+        if isinstance(metal_atomic_numbers, int):
+            metal_atomic_numbers = [metal_atomic_numbers]
         self.metal_atomic_numbers = metal_atomic_numbers
+        Z_index_map = torch.full((max(metal_atomic_numbers) + 1,), -1)
+        for i, z in enumerate(metal_atomic_numbers):
+            Z_index_map[z] = i
+        self.register_buffer('Z_index_map', Z_index_map)
+
+        init_J = torch.zeros(len(metal_atomic_numbers)) # initialize J to 1 for all elements
+        self.J_raw = nn.Parameter(data=init_J, requires_grad=True)
+
         self.AJl = None
         self.r = None
         
         self.feature_key = feature_key
+        self.chi_key = chi_key
         self.output_key = output_key
+        self.system_charge = system_charge
+
         self.model_outputs = [output_key]
         self.scaling_factor = scaling_factor
 
@@ -58,7 +73,12 @@ class MetalWallQEQ(nn.Module):
         box_all = data['cell'].view(-1, 3, 3)
         r_all = data['positions']
         q_all = data[self.feature_key]
+        chi_all = data[self.chi_key] if self.chi_key is not None else torch.zeros_like(q_all)
         atomic_numbers_all = data['atomic_numbers']
+        J_elem = torch.square(self.J_raw) # positive
+        idx = self.Z_index_map[atomic_numbers_all]
+        J_i = J_elem[idx]
+
         if q_all.dim() == 1:
             q_all = q_all.unsqueeze(1)
 
@@ -69,24 +89,38 @@ class MetalWallQEQ(nn.Module):
         
 
         # set the charges to all metal elements to zero
-        all_metal_index = (atomic_numbers_all == self.metal_atomic_numbers)
+        metal_z = torch.tensor(self.metal_atomic_numbers,
+                       device=atomic_numbers_all.device,
+                       dtype=atomic_numbers_all.dtype)
+        all_metal_index = torch.isin(atomic_numbers_all, metal_z)  # shape [n], bool
         q_all[all_metal_index] = 0.0
 
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
+
+        if isinstance(self.system_charge, (int, float)):
+            system_charge = torch.full((len(unique_batches),), 
+                                       self.system_charge, device=data['positions'].device)
+        elif self.system_charge in data:
+            system_charge = data[self.system_charge_key]
+        else:
+            raise ValueError(f'system_charge {self.system_charge} not found in data')
+
                             
         results = []
-        energy_corr_results = []
         energy_external_results = []
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
             r_now, q_now, atomic_numbers, cell = r_all[mask], q_all[mask], atomic_numbers_all[mask], box_all[i]
-            
-            metal_index = (atomic_numbers == self.metal_atomic_numbers)
-            electrolyte_index = ~metal_index
+            system_charge_now = system_charge[i]
+
+            metal_index =  torch.isin(atomic_numbers, metal_z) # metal atoms in this configuration
+            J_i_now = J_i[mask][metal_index]
+            chi_now = chi_all[mask][metal_index]
+            electrolyte_index = ~metal_index # non-metal atoms in this configuration
+
 
             energy_external = torch.zeros(1, device=q_now.device)
-            energy_corr = torch.zeros(1, 1, device=q_now.device)
 
             if metal_index.sum() == 0:
                 q_combined = q_now.clone()
@@ -99,7 +133,7 @@ class MetalWallQEQ(nn.Module):
 
                 # if the positions of metal atoms haven't changed, we use the stored S matrix
                 if self.AJl is None or self.r.shape != r.shape  or not torch.allclose(self.r, r):
-                    self.AJl = self._compute_S_matrix(r.detach(), cell.detach())
+                    self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now)
                     self.r = r.detach()
 
                 _, f_now = self.ep.compute_potential_triclinic(r_now, 
@@ -121,7 +155,7 @@ class MetalWallQEQ(nn.Module):
                         B_ext = self.external_field * r_wrap * self.external_field_norm_factor
                 # the external field generated by electrolyte atoms needs to be scaled by \sqrt{\epsilon_r}
                 B_mat = - f_now[metal_index, :] * self.scaling_factor  + B_ext.unsqueeze(1)
-                chi_vector = torch.cat([B_mat, torch.tensor([0.0], device=q_now.device, dtype=q_now.dtype).unsqueeze(1)])
+                chi_vector = torch.cat([B_mat - chi_now.unsqueeze(1), torch.tensor([system_charge_now], device=q_now.device, dtype=q_now.dtype).unsqueeze(1)])
 
                 q_mw = q_now.clone()
                 q_sol_lambda = self.AJl @ chi_vector
@@ -137,13 +171,13 @@ class MetalWallQEQ(nn.Module):
         return data
         
 
-    def _compute_S_matrix(self, r, cell):
+    def _compute_S_matrix(self, r, cell, J):
         N = len(r)
         q_eye = torch.eye(N, device=r.device)
         _, A_mat = self.ep.compute_potential_triclinic(r, q_eye, cell, compute_field=True)
         
         coeffs = torch.ones((N+1, N+1))
-        coeffs[:N, :N] = A_mat
+        coeffs[:N, :N] = A_mat + torch.diag(J.to(A_mat.dtype))
         coeffs[N,  N]  = 0.0
             
         S = torch.inverse(coeffs)
