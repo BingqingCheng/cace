@@ -19,7 +19,8 @@ class MetalWallQEQ(nn.Module):
                  chi_key: str = None, # if None than all zero
                  output_key: str = 'q_mw',
                  system_charge: Union[float, str] = 0.0,  # Key for system charge in data
-                 scaling_factor: float = 1.0  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
+                 scaling_factor: float = 1.0,  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
+                 use_cache: bool = True
                  ):
         super().__init__()
         self.ep = EwaldPotential(dl=dl,
@@ -45,6 +46,7 @@ class MetalWallQEQ(nn.Module):
         self.AJl = None
         self.r = None
         self._J_last = None
+        self.use_cache = use_cache
         
         self.feature_key = feature_key
         self.chi_key = chi_key
@@ -64,6 +66,8 @@ class MetalWallQEQ(nn.Module):
 
         if not hasattr(self, 'AJl'):
             self.AJl = None
+        if not hasattr(self, 'use_cache'):
+            self.use_cache = True
 
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -141,11 +145,12 @@ class MetalWallQEQ(nn.Module):
                     or not torch.allclose(self.r, r)
                     or self._J_last is None
                     or not torch.allclose(self._J_last, J_i_now)
+                    or not self.use_cache
                 )
 
                 # if the positions of metal atoms haven't changed, we use the stored S matrix
                 if need_recompute:
-                    self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now.detach())
+                    self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now)
                     self.r = r.detach()
                     self._J_last = J_i_now.detach()
 
@@ -194,5 +199,6 @@ class MetalWallQEQ(nn.Module):
         coeffs[N,  N]  = 0.0
             
         S = torch.inverse(coeffs)
+        #S = torch.linalg.solve(coeffs, torch.eye(N+1, device=coeffs.device, dtype=coeffs.dtype))
     
         return S
