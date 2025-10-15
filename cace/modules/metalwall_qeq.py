@@ -150,7 +150,10 @@ class MetalWallQEQ(nn.Module):
 
                 # if the positions of metal atoms haven't changed, we use the stored S matrix
                 if need_recompute:
-                    self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now)
+                    if self.use_cache:
+                        self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now.detach())
+                    else:
+                        self.AJl = self._compute_S_matrix(r.detach(), cell.detach(), J_i_now)
                     self.r = r.detach()
                     self._J_last = J_i_now.detach()
 
