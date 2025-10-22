@@ -1,6 +1,7 @@
 from typing import Dict, List, Union
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from .ewald import EwaldPotential
 
 __all__ = ['MetalWallQEQ']
@@ -19,7 +20,10 @@ class MetalWallQEQ(nn.Module):
                  chi_key: str = None, # if None than all zero
                  output_key: str = 'q_mw',
                  system_charge: Union[float, str] = 0.0,  # Key for system charge in data
+                 system_charge_norm_factor: float = (90.0474)**0.5, # the standard normal factor in accordance with the cace convention used in ewald.py
                  scaling_factor: float = 1.0,  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
+                 J_processing: str = 'square', # 'square' or 'softplus'
+                 J_init: float = 1.0, # initial value for J
                  use_cache: bool = True
                  ):
         super().__init__()
@@ -40,8 +44,9 @@ class MetalWallQEQ(nn.Module):
             Z_index_map[z] = i
         self.register_buffer('Z_index_map', Z_index_map)
 
-        init_J = torch.zeros(len(metal_atomic_numbers)) # initialize J to 1 for all elements
+        init_J = J_init * torch.ones(len(metal_atomic_numbers)) # initialize for all elements
         self.J_raw = nn.Parameter(data=init_J, requires_grad=True)
+        self.J_processing = J_processing
 
         self.AJl = None
         self.r = None
@@ -52,6 +57,7 @@ class MetalWallQEQ(nn.Module):
         self.chi_key = chi_key
         self.output_key = output_key
         self.system_charge = system_charge
+        self.system_charge_norm_factor = system_charge_norm_factor
 
         self.model_outputs = [output_key]
         self.scaling_factor = scaling_factor
@@ -68,6 +74,11 @@ class MetalWallQEQ(nn.Module):
             self.AJl = None
         if not hasattr(self, 'use_cache'):
             self.use_cache = True
+        if not hasattr(self, 'J_processing'):
+            #self.J_processing = 'square'
+            self.J_processing = 'softplus'
+        if not hasattr(self, 'system_charge_norm_factor'):
+            self.system_charge_norm_factor = (90.0474)**0.5
 
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -80,7 +91,11 @@ class MetalWallQEQ(nn.Module):
         q_all = data[self.feature_key]
         chi_all = data[self.chi_key] if self.chi_key is not None else torch.zeros_like(q_all)
         atomic_numbers_all = data['atomic_numbers']
-        J_elem = torch.square(self.J_raw) # positive
+        if self.J_processing == 'square':
+            J_elem = torch.square(self.J_raw) # positive
+        elif self.J_processing == 'softplus':
+            J_elem = F.softplus(self.J_raw)
+
         idx = self.Z_index_map[atomic_numbers_all]
         J_i = J_elem[idx]
 
@@ -106,9 +121,10 @@ class MetalWallQEQ(nn.Module):
 
         if isinstance(self.system_charge, (int, float)):
             system_charge = torch.full((len(unique_batches),), 
-                                       self.system_charge, device=data['positions'].device)
+                                       self.system_charge * self.system_charge_norm_factor, 
+                                       device=data['positions'].device)
         elif self.system_charge in data:
-            system_charge = data[self.system_charge]
+            system_charge = data[self.system_charge] * self.system_charge_norm_factor
         else:
             raise ValueError(f'system_charge {self.system_charge} not found in data')
 
@@ -157,10 +173,13 @@ class MetalWallQEQ(nn.Module):
                     self.r = r.detach()
                     self._J_last = J_i_now.detach()
 
-                _, f_now = self.ep.compute_potential_triclinic(r_now, 
+                if electrolyte_index.sum() > 0:
+                    _, f_now = self.ep.compute_potential_triclinic(r_now, 
                                                            q_now, 
                                                            cell, 
                                                            compute_field=True)
+                else:
+                    f_now = torch.zeros_like(q_now)
 
                 if self.external_field is not None:
                     # assumes that the metal electrodes are on the sides, and the electrolytes are in the middle
@@ -186,22 +205,33 @@ class MetalWallQEQ(nn.Module):
 
             energy_external_results.append(energy_external)
 
-
+        data['mw_energy_external'] = torch.cat(energy_external_results, dim=0)
         data[self.output_key] = torch.cat(results, dim=0)
         
         return data
         
-
     def _compute_S_matrix(self, r, cell, J):
-        N = len(r)
-        q_eye = torch.eye(N, device=r.device)
+        N = r.shape[0]
+        dtype = r.dtype
+        device = r.device
+
+        q_eye = torch.eye(N, dtype=dtype, device=device)
         _, A_mat = self.ep.compute_potential_triclinic(r, q_eye, cell, compute_field=True)
-        
-        coeffs = torch.ones((N+1, N+1), device=r.device)
-        coeffs[:N, :N] = A_mat + torch.diag(J.to(A_mat.dtype))
-        coeffs[N,  N]  = 0.0
-            
-        S = torch.inverse(coeffs)
-        #S = torch.linalg.solve(coeffs, torch.eye(N+1, device=coeffs.device, dtype=coeffs.dtype))
-    
+
+        top_left = A_mat.to(J.dtype) + torch.diag(J)  # depends on J
+        top_right = torch.ones((N, 1), dtype=top_left.dtype, device=device)
+        bot_left  = torch.ones((1, N), dtype=top_left.dtype, device=device)
+        bot_right = torch.zeros((1, 1), dtype=top_left.dtype, device=device)
+
+        coeffs = torch.cat(
+            [torch.cat([top_left, top_right], dim=1),
+             torch.cat([bot_left, bot_right], dim=1)],
+            dim=0
+        )
+
+        I = torch.eye(N + 1, dtype=coeffs.dtype, device=device)
+        S = torch.linalg.solve(coeffs, I)
         return S
+
+    def set_cache(self, use_cache: bool):
+        self.use_cache = use_cache

@@ -83,7 +83,7 @@ class EvaluateTask(nn.Module):
         # check the data type
         if isinstance(data, torch_geometric.batch.Batch):
             data.to(self.device)
-            output = self.model(data.to_dict())
+            output = self.model(data.to_dict(), training=True)
             if self.energy_key in output:
                 energies_now = to_numpy(output[self.energy_key])
                 if self.atomic_energies is not None:
@@ -113,7 +113,7 @@ class EvaluateTask(nn.Module):
                 shuffle=False,
                 drop_last=False,
             )
-            output = self.model(next(iter(data_loader)).to_dict())
+            output = self.model(next(iter(data_loader)).to_dict(), training=True)
             if self.energy_key in output:
                 energy = to_numpy(output[self.energy_key])
                 if self.atomic_energies is not None:
@@ -146,7 +146,7 @@ class EvaluateTask(nn.Module):
             atomforces_list = []
             for batch in data_loader:
                 batch.to(self.device)
-                output = self.model(batch.to_dict())
+                output = self.model(batch.to_dict(), training=True)
                 if self.energy_key in output:
                     energies_now = to_numpy(output[self.energy_key])
                     if self.atomic_energies is not None:
@@ -185,6 +185,8 @@ class EvaluateTask(nn.Module):
                     if len(forces_list) >= 1:
                         atoms.set_array(self.forces_key, forces_list[i] * self.energy_units_to_eV / self.length_units_to_A)
                     for key in self.other_keys:
+                        #print(key)
+                        #print(other_outputs[key].shape)
                         output_now = other_outputs[key][i]
                         #print(key, output_now.shape) 
                         if output_now.ndim > 2 and output_now.shape[0] == 1:
@@ -215,7 +217,7 @@ class EvaluateTask(nn.Module):
         elif isinstance(data, torch_geometric.dataloader.DataLoader):
             for batch in data:
                 batch.to(self.device)
-                output = self.model(batch.to_dict())
+                output = self.model(batch.to_dict(), training=True)
                 if self.energy_key in output:
                     energies_now = to_numpy(output[self.energy_key])
                     if self.atomic_energies is not None:
