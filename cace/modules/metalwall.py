@@ -139,7 +139,7 @@ class MetalWall(nn.Module):
                     # E = \dPhi / L
                     # energy_external = - E * r * q
                     if self.external_field_on:
-                        energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_all[electrolyte_index]).unsqueeze(0) * self.external_field_norm_factor
+                        energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_now[electrolyte_index]).unsqueeze(0) * self.external_field_norm_factor
                     if self.external_field_potential_on:
                         lz = cell[self.external_field_direction, self.external_field_direction]
                         r_wrap = r[:, self.external_field_direction] / lz
