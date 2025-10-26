@@ -23,7 +23,7 @@ class MetalWallQEQ(nn.Module):
                  system_charge_norm_factor: float = (90.0474)**0.5, # the standard normal factor in accordance with the cace convention used in ewald.py
                  scaling_factor: float = 1.0,  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
                  J_processing: str = 'square', # 'square' or 'softplus'
-                 J_init: float = 1.0, # initial value for J
+                 J_init: float = 0.0, # initial value for J
                  use_cache: bool = True
                  ):
         super().__init__()
@@ -75,8 +75,7 @@ class MetalWallQEQ(nn.Module):
         if not hasattr(self, 'use_cache'):
             self.use_cache = True
         if not hasattr(self, 'J_processing'):
-            #self.J_processing = 'square'
-            self.J_processing = 'softplus'
+            self.J_processing = 'square'
         if not hasattr(self, 'system_charge_norm_factor'):
             self.system_charge_norm_factor = (90.0474)**0.5
 
