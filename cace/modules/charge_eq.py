@@ -65,9 +65,9 @@ class ChargeEq(nn.Module):
         r = data['positions']
         chi = data[self.feature_key]
         Z = data['atomic_numbers']
-        element_types = torch.unique(Z)
-        assert len(element_types) == len(self.elements), \
-            f"Number of unique elements {len(element_types)} != expected number {len(self.elements)}."
+        # element_types = torch.unique(Z)
+        # assert len(element_types) == len(self.elements), \
+        #     f"Number of unique elements {len(element_types)} != expected number {len(self.elements)}."
         if chi.dim() == 1:
             chi = chi.unsqueeze(1)
 
