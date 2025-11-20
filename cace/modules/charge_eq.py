@@ -13,13 +13,14 @@ class ChargeEq(nn.Module):
                  feature_key: str = 'chi',
                  output_key: str = 'q_eq',
                  ewald_key: str = 'ewald_potential',
-                 system_charge: float = 0.0,
+                 system_charge: float = None,
                  remove_self_interaction: bool = True,
                  aggregation_mode: str = 'sum',
                  compute_field: bool = True,
                  norm_factor: float = (1./90.0474)**0.5, 
                  scaling_factor: float = 1.0,
-                 system_charge_key: str = 'system_charge',  # Key for system charge in data
+                 system_charge_key: str = None,  # Key for system charge in data
+                 atomic_charge_key: str = None, # Key for atomic charge state in data
                  ):
         super().__init__()
 
@@ -33,6 +34,7 @@ class ChargeEq(nn.Module):
         self.system_charge = system_charge
         self.aggregation_mode = aggregation_mode
         self.system_charge_key = system_charge_key
+        self.atomic_charge_key = atomic_charge_key
 
         self.ep = EwaldPotential(
             dl=dl,
@@ -80,14 +82,31 @@ class ChargeEq(nn.Module):
 
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
 
-        if (self.system_charge_key not in data or data[self.system_charge_key] is None
-            ) and self.system_charge is not None:
-            system_charge = self.system_charge
-            system_charge = torch.full((len(unique_batches),), 
-                                       system_charge, device=data['positions'].device)
-        else:
-            system_charge = data[self.system_charge_key]
+        system_charge = None
 
+        # source 1: Atomic Charge Sum from data
+        atomic_key = getattr(self, "atomic_charge_key", None)
+        if atomic_key is not None and atomic_key in data:
+            system_charge = torch.zeros(len(unique_batches), device=data[atomic_key].device)
+            system_charge.index_add_(0, batch_now, data[atomic_key].flatten())
+        # source 2: System Charge from data
+        sys_key = getattr(self, "system_charge_key", None)
+        if sys_key is not None and sys_key in data:
+            val = data[sys_key]
+            if system_charge is not None and not torch.allclose(system_charge, val, atol=1e-4):
+                raise ValueError(f"Charge Mismatch: Atomic sum vs Data['{sys_key}']")
+            system_charge = val
+        # source 3: Fixed System Charge
+        fixed_val = getattr(self, "system_charge", None)
+        if fixed_val is not None:
+            device = system_charge.device if system_charge is not None else data['positions'].device
+            val = torch.full((len(unique_batches),), fixed_val, device=device)
+            if system_charge is not None and not torch.allclose(system_charge, val, atol=1e-4):
+                raise ValueError(f"Charge Mismatch: Calculated({system_charge[0]}) vs Fixed({fixed_val})")
+            system_charge = val
+        if system_charge is None:
+            raise ValueError("System charge info is missing! (Check atomic_key, system_key, or system_charge)")
+        system_charge = system_charge / self.scaling_factor
 
         results = []
         ewald_results = []
