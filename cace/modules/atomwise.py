@@ -80,6 +80,7 @@ class Atomwise(nn.Module):
         self.post_process = post_process
         self.bias = bias
         self.feature_key = feature_key
+        self.atomic_charge_embedding = None
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -122,6 +123,16 @@ class Atomwise(nn.Module):
             features = features.reshape(features.shape[0], -1)
         elif isinstance(self.feature_key, list):
             features = torch.cat([data[key].reshape(data[key].shape[0], -1) for key in self.feature_key], dim=-1)
+
+        atomic_charge_embedding = getattr(self, "atomic_charge_embedding", None)
+        if atomic_charge_embedding is not None and 'atomic_numbers' in data:
+            if isinstance(atomic_charge_embedding, dict):
+                atomic_numbers = data['atomic_numbers'].cpu().numpy()
+                if not all(isinstance(key, int) for key in atomic_charge_embedding.keys()):
+                    raise ValueError("Keys of atomic_charge_embedding dictionary must be integers.")
+                charge_values = [atomic_charge_embedding.get(int(num), 0) for num in atomic_numbers]
+                charge_state = torch.tensor(charge_values, device=features.device, dtype=features.dtype).unsqueeze(-1)
+            features = torch.cat([features, charge_state], dim=-1)
 
         if self.n_in is None:
             self.n_in = features.shape[1]
