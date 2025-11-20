@@ -127,12 +127,15 @@ class Atomwise(nn.Module):
         atomic_charge_embedding = getattr(self, "atomic_charge_embedding", None)
         if atomic_charge_embedding is not None and 'atomic_numbers' in data:
             if isinstance(atomic_charge_embedding, dict):
-                atomic_numbers = data['atomic_numbers'].cpu().numpy()
-                if not all(isinstance(key, int) for key in atomic_charge_embedding.keys()):
-                    raise ValueError("Keys of atomic_charge_embedding dictionary must be integers.")
-                charge_values = [atomic_charge_embedding.get(int(num), 0) for num in atomic_numbers]
-                charge_state = torch.tensor(charge_values, device=features.device, dtype=features.dtype).unsqueeze(-1)
-            features = torch.cat([features, charge_state], dim=-1)
+                max_z = 120  # maximum atomic number to consider
+                charge_tensor = torch.zeros(max_z, device=features.device, dtype=features.dtype)
+                for z, q in atomic_charge_embedding.items():
+                    z = int(z)
+                    if z < max_z:
+                        charge_tensor[z] = q
+                atomic_nums = data['atomic_numbers'].long().clamp(max=max_z-1)
+                charge_state = charge_tensor[atomic_nums].unsqueeze(-1)
+                features = torch.cat([features, charge_state], dim=-1)
 
         if self.n_in is None:
             self.n_in = features.shape[1]
