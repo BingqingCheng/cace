@@ -135,19 +135,23 @@ class AtomicData(torch_geometric.data.Data):
         )
 
         # this ugly bit is for compatibility with newest ASE versions
-        if data_key['energy'] == 'energy':
-            energy = atoms.get_potential_energy()
-        else:
-            energy = atoms.info.get(data_key["energy"], None)  # eV
+        energy = atoms.info.get(data_key["energy"], None)  # eV
+        if energy is None and data_key['energy'] == 'energy':
+            try:
+                energy = atoms.get_potential_energy()
+            except:
+                energy = None
 
         # subtract atomic energies if available
         if atomic_energies and energy is not None:
             energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
 
-        if data_key['forces'] == 'forces':
-            forces = atoms.get_forces()
-        else:
-            forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
+        forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
+        if forces is None and data_key['forces'] == 'forces':
+            try:
+                forces = atoms.get_forces()
+            except:
+                forces = None
 
         molecular_index = atoms.arrays.get(data_key["molecular_index"], None) # index of molecules
         stress = atoms.info.get(data_key["stress"], None)  # eV / Ang
