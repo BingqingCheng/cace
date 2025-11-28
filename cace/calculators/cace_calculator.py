@@ -38,6 +38,7 @@ class CACECalculator(Calculator):
         forces_key: str = 'forces',
         stress_key: str = 'stress',
         bec_key: str = 'bec',
+        data_key: dict = None,
         external_field: Union[float,List[float]] = None,
         keep_neutral: bool = True, # to keep BEC sum to be neutral
         atomic_energies: dict = None,
@@ -79,6 +80,7 @@ class CACECalculator(Calculator):
         self.forces_key = forces_key
         self.stress_key = stress_key
         self.bec_key = bec_key
+        self.data_key = data_key
         self.keep_neutral = keep_neutral
 
         if external_field is not None:
@@ -111,7 +113,8 @@ class CACECalculator(Calculator):
         data_loader = torch_geometric.dataloader.DataLoader(
             dataset=[
                 AtomicData.from_atoms(
-                    atoms, cutoff=self.cutoff
+                    atoms, cutoff=self.cutoff,
+                    data_key=self.data_key,
                 )
             ],
             batch_size=1,

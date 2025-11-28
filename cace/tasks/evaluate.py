@@ -35,6 +35,7 @@ class EvaluateTask(nn.Module):
         stress_key: str = 'stress',
         other_keys: list = [],
         atomic_energies: dict = None,
+        data_key: dict = None,
         ):
 
         super().__init__()
@@ -57,6 +58,7 @@ class EvaluateTask(nn.Module):
         self.forces_key = forces_key
         self.stress_key = stress_key
         self.other_keys = other_keys
+        self.data_key = data_key
 
         self.atomic_energies = atomic_energies
         
@@ -106,7 +108,8 @@ class EvaluateTask(nn.Module):
             data_loader = torch_geometric.dataloader.DataLoader(
                 dataset=[
                         AtomicData.from_atoms(
-                        data, cutoff=self.cutoff
+                        data, cutoff=self.cutoff,
+                        data_key=self.data_key
                         )
                 ],
                 batch_size=1,
@@ -135,7 +138,8 @@ class EvaluateTask(nn.Module):
             data_loader = torch_geometric.dataloader.DataLoader(
                 dataset=[
 		    AtomicData.from_atoms(
-			atom, cutoff=self.cutoff
+			atom, cutoff=self.cutoff,
+                        data_key=self.data_key
 		    )
 		    for atom in data
 		],
