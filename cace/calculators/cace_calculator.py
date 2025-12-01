@@ -37,6 +37,8 @@ class CACECalculator(Calculator):
         energy_key: str = 'energy',
         forces_key: str = 'forces',
         stress_key: str = 'stress',
+        charge_key: str = None,
+        charge_unit: float = 1.0/(90.0474)**0.5, # the standard normal factor in accordance with the cace convention used in ewald.py
         bec_key: str = 'bec',
         data_key: dict = None,
         external_field: Union[float,List[float]] = None,
@@ -53,6 +55,13 @@ class CACECalculator(Calculator):
             "stress",
         ]
 
+        if charge_key is not None:
+            self.implemented_properties.extend(
+                [
+                    "charges",
+                ]
+            )
+
         self.results = {}
 
         if isinstance(model_path, str):
@@ -67,6 +76,7 @@ class CACECalculator(Calculator):
         self.energy_units_to_eV = energy_units_to_eV
         self.length_units_to_A = length_units_to_A
         self.electric_field_unit = electric_field_unit
+        self.charge_unit = charge_unit
 
         try:
             self.cutoff = self.model.representation.cutoff
@@ -79,6 +89,7 @@ class CACECalculator(Calculator):
         self.energy_key = energy_key 
         self.forces_key = forces_key
         self.stress_key = stress_key
+        self.charge_key = charge_key
         self.bec_key = bec_key
         self.data_key = data_key
         self.keep_neutral = keep_neutral
@@ -157,5 +168,9 @@ class CACECalculator(Calculator):
                 stress * (self.energy_units_to_eV / self.length_units_to_A**3)
             )[0]
             self.results["stress"] = full_3x3_to_voigt_6_stress(self.results["stress"])
+
+        if self.charge_key is not None:
+            charge_output = to_numpy(output[self.charge_key])
+            self.results["charges"] = charge_output * self.charge_unit
 
         return self.results

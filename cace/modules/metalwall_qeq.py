@@ -20,6 +20,7 @@ class MetalWallQEQ(nn.Module):
                  feature_key: str = 'q',
                  chi_key: str = None, # if None than all zero
                  output_key: str = 'q_mw',
+                 net_neutral_condition: bool = False, # whether to compensate for the non-zero charge of the electrolyte
                  system_charge: Union[float, str] = 0.0,  # Key for system charge in data
                  system_charge_norm_factor: float = (90.0474)**0.5, # the standard normal factor in accordance with the cace convention used in ewald.py
                  scaling_factor: float = 1.0,  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
@@ -57,6 +58,7 @@ class MetalWallQEQ(nn.Module):
         self.feature_key = feature_key
         self.chi_key = chi_key
         self.output_key = output_key
+        self.net_neutral_condition = net_neutral_condition
         self.system_charge = system_charge
         self.system_charge_norm_factor = system_charge_norm_factor
 
@@ -81,8 +83,12 @@ class MetalWallQEQ(nn.Module):
             #self.J_processing = 'softplus'
         if not hasattr(self, 'system_charge_norm_factor'):
             self.system_charge_norm_factor = (90.0474)**0.5
+
         if not hasattr(self, 'external_potential'):
             self.external_potential = None
+
+        if not hasattr(self, 'net_neutral_condition'):
+            self.net_neutral_condition = False
 
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -142,10 +148,15 @@ class MetalWallQEQ(nn.Module):
             system_charge_now = system_charge[i]
 
             metal_index =  torch.isin(atomic_numbers, metal_z) # metal atoms in this configuration
+            electrolyte_index = ~metal_index # non-metal atoms in this configuration
             J_i_now = J_i[mask][metal_index]
             chi_now = chi_all[mask][metal_index]
-            electrolyte_index = ~metal_index # non-metal atoms in this configuration
 
+            # system charge neutrality
+            electrolyte_charge = torch.sum(q_now[electrolyte_index])
+            if self.net_neutral_condition:
+                #system_charge_now -= electrolyte_charge.detach()
+                system_charge_now -= electrolyte_charge
 
             energy_external = torch.zeros(1, device=q_now.device)
 
@@ -162,7 +173,7 @@ class MetalWallQEQ(nn.Module):
                     self.AJl is None
                     or self.r is None
                     or self.r.shape != r.shape
-                    or not torch.allclose(self.r, r)
+                    or not torch.allclose(self.r, r, atol=1e-2)
                     or self._J_last is None
                     or not torch.allclose(self._J_last, J_i_now)
                     or not self.use_cache
