@@ -16,8 +16,8 @@ from ..tools import voigt_to_matrix
 from .neighborhood import get_neighborhood
 
 default_data_key = {
-    "energy": "energy",
-    "forces": "forces",
+    "energy": "ref_energy",
+    "forces": "ref_forces",
     "molecular_index": "molecular_index",
     "stress": "stress",
     "virials": "virials",
