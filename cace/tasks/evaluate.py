@@ -189,15 +189,11 @@ class EvaluateTask(nn.Module):
                     if len(forces_list) >= 1:
                         atoms.set_array(self.forces_key, forces_list[i] * self.energy_units_to_eV / self.length_units_to_A)
                     for key in self.other_keys:
-                        #print(key)
-                        #print(other_outputs[key].shape)
                         output_now = other_outputs[key][i]
-                        #print(key, output_now.shape) 
                         if output_now.ndim > 2 and output_now.shape[0] == 1:
                             output_now = output_now[0]
                         if output_now.ndim > 2:
                             output_now = output_now.reshape(output_now.shape[0], -1)
-                        #print(key, output_now.shape) 
                         # is complex
                         if np.iscomplexobj(output_now):
                             if output_now.shape[0] == len(atoms.get_positions()):
