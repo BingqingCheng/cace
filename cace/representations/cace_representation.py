@@ -47,6 +47,7 @@ class Cace(nn.Module):
         timeit: bool = False,
         keep_node_features_A: bool = False,
         forward_features: List[str] = [],
+        charge_spin_key: Optional[str] = None,
     ):
         """
         Args:
@@ -92,7 +93,14 @@ class Cace(nn.Module):
                          node_dim=self.nz, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[1]
                          )
         else:
-            self.node_embedding_receiver = self.node_embedding_sender 
+            self.node_embedding_receiver = self.node_embedding_sender
+
+        self.charge_spin_key = charge_spin_key
+        if charge_spin_key is not None: 
+            self.charge_spin_embedding = NodeEmbedding(
+                         node_dim=1, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[0]
+                         )
+
 
         if edge_encoder is not None:
             self.edge_coding = edge_encoder
@@ -177,6 +185,13 @@ class Cace(nn.Module):
         ## embed to a different dimension
         node_embedded_sender = self.node_embedding_sender(node_one_hot)
         node_embedded_receiver = self.node_embedding_receiver(node_one_hot)
+
+
+        if hasattr(self, 'charge_spin_key') and self.charge_spin_key is not None:
+            charge_spin_feat = self.charge_spin_embedding(data[self.charge_spin_key].view(-1,1))
+            node_embedded_sender = node_embedded_sender + charge_spin_feat
+            node_embedded_receiver = node_embedded_receiver + charge_spin_feat
+
         ## get the edge type
         encoded_edges = self.edge_coding(edge_index=data["edge_index"],
                                          node_type=node_embedded_sender,

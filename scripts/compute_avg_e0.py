@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../cace/')
 import cace
 import pickle
 from ase.io import read

@@ -16,8 +16,8 @@ from ..tools import voigt_to_matrix
 from .neighborhood import get_neighborhood
 
 default_data_key = {
-    "energy": "energy",
-    "forces": "forces",
+    "energy": "ref_energy",
+    "forces": "ref_forces",
     "molecular_index": "molecular_index",
     "stress": "stress",
     "virials": "virials",
@@ -134,25 +134,25 @@ class AtomicData(torch_geometric.data.Data):
             cell=cell
         )
 
-        try:
-            energy = atoms.info.get(data_key["energy"], None)  # eV
-        except:
-            # this ugly bit is for compatibility with newest ASE versions
-            if data_key['energy'] == 'energy':
+        # this ugly bit is for compatibility with newest ASE versions
+        energy = atoms.info.get(data_key["energy"], None)  # eV
+        if energy is None and data_key['energy'] == 'energy':
+            try:
                 energy = atoms.get_potential_energy()
-            else:
+            except:
                 energy = None
 
         # subtract atomic energies if available
         if atomic_energies and energy is not None:
             energy -= sum(atomic_energies.get(Z, 0) for Z in atomic_numbers)
-        try:
-            forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
-        except:
-            if data_key['forces'] == 'forces':
+
+        forces = atoms.arrays.get(data_key["forces"], None)  # eV / Ang
+        if forces is None and data_key['forces'] == 'forces':
+            try:
                 forces = atoms.get_forces()
-            else:
+            except:
                 forces = None
+
         molecular_index = atoms.arrays.get(data_key["molecular_index"], None) # index of molecules
         stress = atoms.info.get(data_key["stress"], None)  # eV / Ang
         virials = atoms.info.get(data_key["virials"], None)

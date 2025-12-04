@@ -41,3 +41,7 @@ from .grad import *
 from .les_wrapper import *
 
 from .metalwall import *
+
+from .metalwall_qeq import *
+
+from .charge_eq import *

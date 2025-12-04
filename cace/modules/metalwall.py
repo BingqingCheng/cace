@@ -121,7 +121,7 @@ class MetalWall(nn.Module):
                 B_ext = torch.zeros_like(r[:, self.external_field_direction])
 
                 # if the positions of metal atoms haven't changed, we use the stored S matrix
-                if self.S is None or self.A_mat is None or self.r.shape != r.shape  or not torch.allclose(self.r, r):
+                if self.S is None or self.A_mat is None or self.r.shape != r.shape  or not torch.allclose(self.r, r, atol=1e-2):
                     self.S = self._compute_S_matrix(r.detach(), cell.detach())
                     self.r = r.detach()
 
@@ -139,7 +139,7 @@ class MetalWall(nn.Module):
                     # E = \dPhi / L
                     # energy_external = - E * r * q
                     if self.external_field_on:
-                        energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_all[electrolyte_index]).unsqueeze(0) * self.external_field_norm_factor
+                        energy_external = - self.external_field * torch.sum(r_now[electrolyte_index, self.external_field_direction].unsqueeze(1) * q_now[electrolyte_index]).unsqueeze(0) * self.external_field_norm_factor
                     if self.external_field_potential_on:
                         lz = cell[self.external_field_direction, self.external_field_direction]
                         r_wrap = r[:, self.external_field_direction] / lz
@@ -160,6 +160,7 @@ class MetalWall(nn.Module):
                 # so we calculate the difference
                 if self.scaling_factor != 1.0:
                     energy_corr = q_mw[metal_index].T @ self.A_mat @ q_mw[metal_index] * (self.scaling_factor**2. - 1) / 2.
+
             energy_corr_results.append(energy_corr[0])
             energy_external_results.append(energy_external)
 
