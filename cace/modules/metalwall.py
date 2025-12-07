@@ -161,8 +161,11 @@ class MetalWall(nn.Module):
                 results.append(q_mw)
 
                 # the electrostatic energy of the electrode will be estimated as q^les_i*q^les_j/r_ij = q_i*q_j / (r_ij \epsilon_infty),
-                # but it's actually q_i*q_j / r_ij / \infty  = 0, so we need to correct it
-                energy_corr = q_mw[metal_index].T @ self.A_mat @ q_mw[metal_index] * -1. / 2.
+                # but it's actually q_i*q_j / r_ij = (q^les_i*q^les_j/r_ij) * \epsilon_infty
+                # so we calculate the difference
+                if self.scaling_factor != 1.0:
+                    energy_corr = q_mw[metal_index].T @ self.A_mat @ q_mw[metal_index] * (self.scaling_factor**2. - 1) / 2.
+
             energy_corr_results.append(energy_corr[0])
             energy_external_results.append(energy_external)
 
