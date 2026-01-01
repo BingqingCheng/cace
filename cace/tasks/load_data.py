@@ -1,6 +1,6 @@
 import dataclasses
 import logging
-from typing import Dict, List, Optional, Tuple, Sequence
+from typing import Dict, List, Optional, Tuple, Sequence, Union
 import numpy as np
 from ase import Atoms
 from ase.io import read
@@ -65,9 +65,9 @@ def load_data_loader(
     return loader
 
 def get_dataset_from_xyz(
-    train_path: str,
+    train_path: Union[str, Sequence[str]],
     cutoff: float,
-    valid_path: str = None,
+    valid_path: Union[str, Sequence[str]] = None,
     valid_fraction: float = 0.1,
     test_path: str = None,
     seed: int = 1234,
@@ -75,14 +75,28 @@ def get_dataset_from_xyz(
     atomic_energies: Dict[int, float] = None
 ) -> SubsetAtoms:
     """Load training and test dataset from xyz file"""
-    all_train_configs = read(train_path, ":")
+    def _read_many(paths):
+        if paths is None:
+            return []
+        if isinstance(paths, str):
+            paths = [paths]
+        configs = []
+        for p in paths:
+            c = read(p, ":")
+            if not isinstance(c, list):
+                c = [c]
+            configs.extend(c)
+        return configs
+
+    all_train_configs = _read_many(train_path)
+
     if not isinstance(all_train_configs, list):
         all_train_configs = [all_train_configs]
     logging.info(
         f"Loaded {len(all_train_configs)} training configurations from '{train_path}'"
     )
     if valid_path is not None:
-        valid_configs = read(valid_path, ":")
+        valid_configs = _read_many(valid_path)
         if not isinstance(valid_configs, list):
             valid_configs = [valid_configs]
         logging.info(
