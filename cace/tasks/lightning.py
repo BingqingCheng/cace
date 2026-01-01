@@ -3,11 +3,21 @@ import glob
 import logging
 import torch
 import torch.nn as nn
-import lightning as L
+try:
+    import lightning as L
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Missing dependency: 'lightning'. "
+    ) from e
 from . import GetLoss
 from ..tools import Metrics
 from typing import Dict, Optional, List, Tuple
-from lightning.pytorch.callbacks import LearningRateMonitor
+try:
+    from lightning.pytorch.callbacks import LearningRateMonitor
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Missing dependency: 'lightning'. "
+    ) from e
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
 
