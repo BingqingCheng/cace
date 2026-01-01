@@ -62,7 +62,7 @@ class MetalWallQEQ(nn.Module):
         self.system_charge = system_charge
         self.system_charge_norm_factor = system_charge_norm_factor
 
-        self.model_outputs = [output_key]
+        self.model_outputs = [output_key, 'mw_lambda']
         self.scaling_factor = scaling_factor
 
         self.external_field = external_field
@@ -141,6 +141,7 @@ class MetalWallQEQ(nn.Module):
                             
         results = []
         energy_external_results = []
+        mw_lambda = []
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
@@ -220,10 +221,12 @@ class MetalWallQEQ(nn.Module):
                 # we then scale the true qs to get q^les
                 q_mw[metal_index] = q_sol_lambda[:-1] / self.scaling_factor
                 results.append(q_mw)
+                mw_lambda.append(q_sol_lambda[-1] / self.external_field_norm_factor)
 
             energy_external_results.append(energy_external)
 
         data['mw_energy_external'] = torch.cat(energy_external_results, dim=0)
+        data['mw_lambda'] = torch.cat(mw_lambda, dim=0)
         data[self.output_key] = torch.cat(results, dim=0)
         
         return data
