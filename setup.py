@@ -12,6 +12,7 @@ setup(
         'ase<=3.22.1',
         'torch',
         'matscipy',
+        # 'lightning', # Uncomment if needed
     ],
     classifiers=[
         'Programming Language :: Python :: 3',
