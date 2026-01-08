@@ -4,7 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import numpy as np
+import math
 import torch
 import torch.nn as nn
 
@@ -26,7 +26,7 @@ def cosine_cutoff(input: torch.Tensor, cutoff: torch.Tensor):
         """
 
     # Compute values of cutoff function
-    input_cut = 0.5 * (torch.cos(input * np.pi / cutoff) + 1.0)
+    input_cut = 0.5 * (torch.cos(input * math.pi / cutoff) + 1.0)
     # Remove contributions beyond the cutoff radius
     input_cut *= (input < cutoff).float()
     return input_cut
