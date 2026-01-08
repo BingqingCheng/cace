@@ -32,7 +32,7 @@ class EwaldPotential(nn.Module):
         self.model_outputs = [output_key]
         # 1/2\epsilon_0, where \epsilon_0 is the vacuum permittivity
         # \epsilon_0 = 5.55263*10^{-3} e^2 eV^{-1} A^{-1}
-        #self.norm_factor = 90.0474
+        #self.norm_factor = 90.0474f
         self.norm_factor = 1.0 
         # when using a norm_factor = 1, all "charges" are scaled by sqrt(90.0474)
         # the external field is then scaled by sqrt(90.0474) = 9.48933
@@ -364,7 +364,14 @@ class EwaldPotential(nn.Module):
 
         # max Nk for each axis
         norms = torch.norm(cell_now, dim=1)
-        Nk = [max(1, int(n.item() / self.dl)) for n in norms]
+
+        # PATCH: Allow using a pre-calculated, static grid size to enable CUDA Graphs
+        if hasattr(self, "static_Nk") and self.static_Nk is not None:
+            Nk = self.static_Nk
+        else:
+            # Fallback for first run or non-compiled mode
+            Nk = [max(1, int(n.item() / self.dl)) for n in norms]
+            
         n1 = torch.arange(-Nk[0], Nk[0] + 1, device=device)
         n2 = torch.arange(-Nk[1], Nk[1] + 1, device=device)
         n3 = torch.arange(-Nk[2], Nk[2] + 1, device=device)
