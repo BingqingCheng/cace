@@ -21,7 +21,6 @@ Run in base directory:
 python3 -m venv venv
 source venv/bin/activate
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu130
-pip install -r requirements.txt
 pip install -e .
 ```
 
@@ -43,10 +42,9 @@ python ./md-opt.py  # torch.compile optimized benchmark
 
 Runtime in seconds. Lower is better
 
-| GPU               | Non-Optimized | Optimized | Notes           |
-| NVidia Spark GB10 | 78            | 45        | CUDA 13.0       |
-| L40S              | 38            |           | AWS EC2 g6e     |
-| 
-|
-|
+| GPU               | Non-Optimized | Optimized | Notes                           |
+| ----------------- | ------------- | --------- | ------------------------------- |
+| NVidia Spark GB10 | 78            | 45        | Desktop device                  |
+| L40S              | 38            | 26        | AWS EC2 g6e.xlarge Instance     |
+| RTX PRO 6000      | 30            | 19        | RTX Pro 6000 Blackwell on GCP   |
 
