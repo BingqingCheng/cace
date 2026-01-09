@@ -8,7 +8,7 @@ setup(
     description='Cartesian Atomic Cluster Expansion Machine Learning Potential',
     packages=find_packages(),
     install_requires=[
-        'numpy',
+        'numpy<2',
         'ase<=3.22.1',
         'torch',
         'matscipy',

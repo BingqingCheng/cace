@@ -1,0 +1,58 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual Environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+ENV/*
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Distribution / packaging
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+MANIFEST
+
+# C extensions
+*.so
+
+# Cache files
+*.cached
+*.pdb
+
+# Testing
+.coverage
+.coverage.*
+nosetests.xml
+test-results/
+hypothesis/
+
+# Environment Variables
+.env
+*.env
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+
+# Logs
+*.log
+
+# Python settings
+*.pyc
+*.pyo
+
+# Miscellaneous
+.DS_Store
+Thumbs.db
