@@ -66,9 +66,6 @@ class Metrics(nn.Module):
                 target: Optional[Dict[str, torch.Tensor]] = None,
                ):
         pred_tensor = pred[self.predict_name].clone().detach()
-        if len(pred_tensor.shape) > 2:
-            pred_tensor = pred_tensor.reshape(pred_tensor.shape[0], -1)
-        #print("pred_tensor", pred_tensor.shape)
         if self.output_index is not None:
             pred_tensor = pred_tensor[..., self.output_index]
         if target is not None:
@@ -77,7 +74,6 @@ class Metrics(nn.Module):
             target_tensor = pred[self.target_name].clone().detach()
         else:
             raise ValueError("Target is None and predict_name is not equal to target_name")
-        #print("target_tensor:", target_tensor.shape)
         if self.per_atom:
             n_atoms = torch.bincount(target['batch']).clone().detach()
             pred_tensor = pred_tensor / n_atoms
