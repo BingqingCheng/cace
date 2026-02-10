@@ -26,7 +26,7 @@ Long-range MLIP scripts are in [https://github.com/BingqingCheng/cace-lr-fit].
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the CC BY-NC 4.0 License - see the LICENSE file for details.
 
 ## Citation
 
