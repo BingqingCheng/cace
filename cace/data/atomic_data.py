@@ -42,6 +42,7 @@ class AtomicData(torch_geometric.data.Data):
     shifts: torch.Tensor
     unit_shifts: torch.Tensor
     cell: torch.Tensor
+    pbc: torch.Tensor
     forces: torch.Tensor
     molecular_index: torch.Tensor
     energy: torch.Tensor
@@ -64,6 +65,7 @@ class AtomicData(torch_geometric.data.Data):
         unit_shifts: torch.Tensor,  # [n_edges, 3]
         num_nodes: Optional[torch.Tensor] = None, #[,]
         cell: Optional[torch.Tensor] = None,  # [3,3]
+        pbc: Optional[torch.Tensor] = None,  # [3]
         forces: Optional[torch.Tensor] = None,  # [n_nodes, 3]
         molecular_index: Optional[torch.Tensor] = None,  # [n_nodes]
         energy: Optional[torch.Tensor] = None,  # [, ]
@@ -83,6 +85,7 @@ class AtomicData(torch_geometric.data.Data):
         assert shifts.shape[1] == 3
         assert unit_shifts.shape[1] == 3
         assert cell is None or cell.shape == (3, 3)
+        assert pbc is None or pbc.shape == (3,)
         assert forces is None or forces.shape == (num_nodes, 3)
         assert molecular_index is None or molecular_index.shape == (num_nodes,)
         assert energy is None or len(energy.shape) == 0
@@ -97,6 +100,7 @@ class AtomicData(torch_geometric.data.Data):
             "shifts": shifts,
             "unit_shifts": unit_shifts,
             "cell": cell,
+            "pbc": pbc,
             "atomic_numbers": atomic_numbers,
             "num_nodes": num_nodes,
             "forces": forces,
@@ -165,6 +169,7 @@ class AtomicData(torch_geometric.data.Data):
                 3 * [0.0, 0.0, 0.0], dtype=torch.get_default_dtype()
             ).view(3, 3)
         )
+        pbc_tensor = torch.tensor([bool(x) for x in pbc], dtype=torch.bool)
 
         forces = (
             torch.tensor(forces, dtype=torch.get_default_dtype())
@@ -219,6 +224,7 @@ class AtomicData(torch_geometric.data.Data):
             shifts=torch.tensor(shifts, dtype=torch.get_default_dtype()),
             unit_shifts=torch.tensor(unit_shifts, dtype=torch.get_default_dtype()),
             cell=cell,
+            pbc=pbc_tensor,
             atomic_numbers=torch.tensor(atomic_numbers, dtype=torch.long),
             num_nodes=atomic_numbers.shape[0],
             forces=forces,
