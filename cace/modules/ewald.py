@@ -47,6 +47,23 @@ class EwaldPotential(nn.Module):
         self.required_derivatives = []
         self.required_derivatives.append('cell')
 
+    @staticmethod
+    def _resolve_pbc_for_graph(data_pbc, graph_index: int):
+        if data_pbc is None:
+            return None
+        if isinstance(data_pbc, torch.Tensor):
+            pbc = data_pbc.detach().cpu().bool()
+            if pbc.ndim == 1 and pbc.numel() == 3:
+                return pbc
+            if pbc.ndim == 2 and pbc.shape[1] == 3:
+                return pbc[graph_index]
+            if pbc.ndim == 1 and pbc.numel() % 3 == 0:
+                start = graph_index * 3
+                end = start + 3
+                if end <= pbc.numel():
+                    return pbc[start:end]
+        return None
+
     def forward(self, data: Dict[str, torch.Tensor], **kwargs):
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
@@ -81,11 +98,21 @@ class EwaldPotential(nn.Module):
             # Calculate the potential energy for the i-th configuration
             r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
             box_diag = box[i].diagonal(dim1=-2, dim2=-1)
-            if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
-                # the box is not periodic, we use the direct sum
+
+            pbc_now = self._resolve_pbc_for_graph(data.get("pbc", None), int(i))
+            if pbc_now is not None:
+                if not torch.any(pbc_now):
+                    if self.exponent == 1:
+                        pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
+                    else:
+                        raise ValueError("Non-periodic Ewald branch currently supports exponent == 1 only.")
+                else:
+                    pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
+            elif box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
+                # Backward-compatible fallback when pbc metadata is unavailable.
                 pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
             elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
-                # the box is periodic, we use the reciprocal sum
+                # Backward-compatible fallback when pbc metadata is unavailable.
                 pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
             else:
                 raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
