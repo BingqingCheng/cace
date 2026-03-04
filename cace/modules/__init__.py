@@ -45,3 +45,11 @@ from .metalwall import *
 from .metalwall_qeq import *
 
 from .charge_eq import *
+
+from .pswf import *
+
+from .pswf1e3 import *
+
+from .pswf_qfield import *
+
+from .sog import *
