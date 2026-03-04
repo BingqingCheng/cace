@@ -53,3 +53,5 @@ from .pswf1e3 import *
 from .pswf_qfield import *
 
 from .sog import *
+
+from .tkm_ewald import *
