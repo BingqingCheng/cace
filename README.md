@@ -41,16 +41,6 @@ from cace.modules import PSWFPotential, PSWFPotential_e3, PSWFPotential_Qfield, 
 
 Testing notes for these modules are documented in `docs/pswf-sog-testing.md`.
 
-## Boundary Handling Contract
-
-Data loading and solver logic are intentionally separated:
-
-- `cace.data` preserves the physical geometry/cell from input structures.
-- Data loading does **not** resize/expand system dimensions to encode boundary conditions.
-- Boundary-condition handling (periodic vs free-space branch selection) is solver-side (for example in `cace.modules.ewald.EwaldPotential`).
-
-See `docs/boundary-handling.md` for details and regression tests.
-
 ## License
 
 This project is licensed under the CC BY-NC 4.0 License - see the LICENSE file for details.
