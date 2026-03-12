@@ -275,7 +275,7 @@ class LightningTrainingTask():
                                     lr_scheduler_config = lr_scheduler_config,
         )
 
-    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,check_val_every_n_epoch=1,
+    def fit(self,data,chkpt=None,dev_run=False,max_epochs=None,max_steps=None,check_val_every_n_epoch=1,detect_anomaly=False,
             gradient_clip_val=10,accelerator="auto",progress_bar=True):
         logger = TensorBoardLogger(self.logs_directory,name=self.name)
         if (max_steps is None) and (max_epochs is None):
@@ -288,23 +288,23 @@ class LightningTrainingTask():
             self.load(chkpt)
         if max_epochs:
             if self.ddp:
-                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",
+                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",detect_anomaly=detect_anomaly,
                                     fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
                                     check_val_every_n_epoch=check_val_every_n_epoch,
                                     gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
             else:
                 trainer = L.Trainer(fast_dev_run=dev_run,max_epochs=max_epochs,enable_progress_bar=progress_bar,
-                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,detect_anomaly=detect_anomaly,
                                     gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         elif max_steps:
             if self.ddp:
-                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",
+                trainer = L.Trainer(devices=DEVICE_COUNT, strategy="ddp",detect_anomaly=detect_anomaly,
                                     fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
                                     check_val_every_n_epoch=check_val_every_n_epoch,
                                     gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
             else:
                 trainer = L.Trainer(fast_dev_run=dev_run,max_steps=max_steps,enable_progress_bar=progress_bar,
-                                    check_val_every_n_epoch=check_val_every_n_epoch,
+                                    check_val_every_n_epoch=check_val_every_n_epoch,detect_anomaly=detect_anomaly,
                                     gradient_clip_val=gradient_clip_val,callbacks=self.callbacks,logger=logger,accelerator=accelerator)
         trainer.fit(self.model,datamodule=data,ckpt_path=chkpt)
 
