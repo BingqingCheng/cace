@@ -18,6 +18,7 @@ class MetalWall(nn.Module):
                  feature_key: str = 'q',
                  output_key: str = 'q_mw',
                  adjust_neutrality: bool = False,
+                 keep_metal_charge: bool = False,
                  scaling_factor: float = 1.0  # set to be \sqrt{\epsilon_r} of the electrolyte. All charges in the electrolyte are scaled by Q^les = q/scaling_factor
                  ):
         super().__init__()
@@ -37,7 +38,8 @@ class MetalWall(nn.Module):
         
         self.feature_key = feature_key
         self.output_key = output_key
-        self.adjust_neutrality = adjust_neutrality        
+        self.adjust_neutrality = adjust_neutrality
+        self.keep_metal_charge = keep_metal_charge
         self.model_outputs = [output_key]
         self.scaling_factor = scaling_factor
 
@@ -50,6 +52,8 @@ class MetalWall(nn.Module):
     def _backward_compatibility(self): 
         if not hasattr(self, 'adjust_neutrality'):
             self.adjust_neutrality = False
+        if not hasattr(self, 'keep_metal_charge'):
+            self.keep_metal_charge = False
         if not hasattr(self, 'scaling_factor'):
             self.scaling_factor = 1.0
         if not hasattr(self, 'A_mat'):
@@ -90,7 +94,8 @@ class MetalWall(nn.Module):
 
         # set the charges to all metal elements to zero
         all_metal_index = (atomic_numbers_all == self.metal_atomic_numbers)
-        q_all[all_metal_index] = 0.0
+        if self.keep_metal_charge is False:
+            q_all[all_metal_index] = 0.0
 
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
                             
@@ -152,7 +157,7 @@ class MetalWall(nn.Module):
 
                 q_mw = q_now.clone()
                 # we then scale the true qs to get q^les
-                q_mw[metal_index] = self.S @ B_mat / self.scaling_factor
+                q_mw[metal_index] = q_mw[metal_index] + self.S @ B_mat / self.scaling_factor
                 results.append(q_mw)
 
                 # the electrostatic energy of the electrode will be estimated as q^les_i*q^les_j/r_ij = q_i*q_j / (r_ij \epsilon_infty),

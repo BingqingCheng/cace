@@ -173,4 +173,7 @@ class CACECalculator(Calculator):
             charge_output = to_numpy(output[self.charge_key])
             self.results["charges"] = charge_output * self.charge_unit
 
+        self.results["energy"] = float(np.asarray(self.results["energy"], dtype=np.float64))     # python float
+        self.results["forces"] = np.asarray(self.results["forces"], dtype=np.float64)            # (N,3) float64
+
         return self.results

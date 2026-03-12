@@ -211,8 +211,7 @@ class EvaluateTask(nn.Module):
                         atoms.info[self.stress_key] = stresses_list[i]
                     atoms_list.append(atoms)
       	 	    # Write atoms to output path
-                    write(xyz_output, atoms, format="extxyz", append=True)
-            #return atoms_list
+            write(xyz_output, atoms_list, format="extxyz", append=False)
 
         elif isinstance(data, torch_geometric.dataloader.DataLoader):
             for batch in data:

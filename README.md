@@ -22,9 +22,11 @@ Please refer to the `scripts/train.py`.
 
 More example scripts can be found in [https://github.com/BingqingCheng/cacefit].
 
+Long-range MLIP scripts are in [https://github.com/BingqingCheng/cace-lr-fit].
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the CC BY-NC 4.0 License - see the LICENSE file for details.
 
 ## Citation
 

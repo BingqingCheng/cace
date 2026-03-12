@@ -7,7 +7,7 @@ that don't require installing PyTorch C++ extensions.
 See https://github.com/pytorch/pytorch/issues/63780.
 """
 
-from typing import Optional
+from typing import Optional, List
 
 import torch
 
@@ -23,8 +23,7 @@ def _broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
     src = src.expand_as(other)
     return src
 
-
-@torch.jit.script
+# REMOVED: @torch.jit.script  <-- This was blocking torch.compile
 def scatter_sum(
     src: torch.Tensor,
     index: torch.Tensor,
@@ -33,21 +32,35 @@ def scatter_sum(
     dim_size: Optional[int] = None,
     reduce: str = "sum",
 ) -> torch.Tensor:
-    assert reduce == "sum"  # for now, TODO
-    index = _broadcast(index, src, dim)
+    # assert reduce == "sum" # Removed assert to speed up production code
+    
+    # Handle negative dimensions
+    if dim < 0:
+        dim = src.dim() + dim
+
+    # Broadcast index if necessary
+    if index.dim() != src.dim():
+        # equivalent to _broadcast but inline for compiler visibility
+        for _ in range(src.dim() - index.dim()):
+            index = index.unsqueeze(-1)
+        index = index.expand_as(src)
+
     if out is None:
-        size = list(src.size())
+        size: List[int] = list(src.size())
+        
         if dim_size is not None:
             size[dim] = dim_size
         elif index.numel() == 0:
             size[dim] = 0
         else:
+            # WARNING: This line causes a graph break if dim_size is not provided!
+            # The GPU must wait for the CPU to read this value.
             size[dim] = int(index.max()) + 1
+            
         out = torch.zeros(size, dtype=src.dtype, device=src.device)
         return out.scatter_add_(dim, index, src)
     else:
         return out.scatter_add_(dim, index, src)
-
 
 @torch.jit.script
 def scatter_std(

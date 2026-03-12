@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import numpy as np
 from .angular_tools import (
     find_combo_vectors_nu2,
     find_combo_vectors_nu3,
@@ -141,7 +140,7 @@ class Symmetrizer(nn.Module):
            self._get_indices_allnu()
 
         num_nodes, n_radial, _, n_chanel = node_attr.size()
-        n_angular_sym = 1 + np.sum([len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1)])
+        n_angular_sym = 1 + sum(len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1))
         sym_node_attr = torch.zeros((num_nodes, n_radial, n_angular_sym, n_chanel),
                                     dtype=node_attr.dtype, device=node_attr.device)
 
@@ -224,7 +223,7 @@ class Symmetrizer_Tensor(nn.Module):
         num_nodes, n_radial, n_l, n_chanel = node_attr.size()
         assert n_l == self.n_l
 
-        n_angular_sym = 1 + np.sum([len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1)])
+        n_angular_sym = 1 + sum(len(self.vec_dict_allnu[nu]) for nu in range(2, self.max_nu + 1))
         sym_node_attr = torch.zeros((num_nodes, n_radial, n_angular_sym, n_chanel),
                                     dtype=node_attr.dtype, device=node_attr.device)
 

@@ -108,7 +108,7 @@ class Atomwise(nn.Module):
                 data: Dict[str, torch.Tensor], 
                 training: bool = None,
                 output_index: int = None, # only used for multi-head output
-               ) -> Dict[str, torch.Tensor]:
+                ) -> Dict[str, torch.Tensor]:
 
         # check if self.feature_key exists, otherwise set default 
         if not hasattr(self, "feature_key") or self.feature_key is None: 
@@ -128,6 +128,7 @@ class Atomwise(nn.Module):
         else:
             assert self.n_in == features.shape[1]
 
+        # Lazy init of outnet (One-time setup)
         if self.outnet == None:
             self.outnet = build_mlp(
                 n_in=self.n_in,
@@ -164,16 +165,28 @@ class Atomwise(nn.Module):
         if hasattr(self, "descriptor_output_key") and self.descriptor_output_key is not None:
             data[self.descriptor_output_key] = features
 
-        # aggregate
+        # --- OPTIMIZED AGGREGATION BLOCK ---
         if self.aggregation_mode is not None:
+            # FIX: Calculate the batch size (number of systems) as a Tensor.
+            # This avoids the 'int(index.max())' call that breaks torch.compile.
+            if "batch" in data and data["batch"].numel() > 0:
+                # We assume batch indices are 0 to N-1. The size is max index + 1.
+                nbatch = data["batch"].max() + 1
+            else:
+                # Fallback for single system if batch key is missing or empty
+                nbatch = 1
+
             y = scatter_sum(
                 src=y, 
                 index=data["batch"], 
-                dim=0)
+                dim=0,
+                dim_size=nbatch # <--- Passing this prevents the Graph Break
+            )
             y = torch.squeeze(y, -1)
 
             if self.aggregation_mode == "avg":
-                y = y / torch.bincount(data['batch'])
+                # torch.bincount is also graph-safe
+                y = y / torch.bincount(data['batch'], minlength=nbatch)
 
         if hasattr(self, "post_process") and self.post_process is not None:
             y = self.post_process(y)

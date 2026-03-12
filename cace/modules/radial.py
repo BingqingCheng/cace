@@ -1,10 +1,10 @@
 ###########################################################################################
 # Radial basis
-# modified from mace/mace/modules/radials.py and schnetpack/src/schnetpack/nn/radials.py 
+# modified from mace/mace/modules/radials.py and schnetpack/src/schnetpack/nn/radials.py
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import numpy as np
+import math
 import torch
 import torch.nn as nn
 
@@ -28,7 +28,7 @@ class BesselRBF(nn.Module):
         self.n_rbf = n_rbf
 
         bessel_weights = (
-            np.pi
+            math.pi
             / cutoff
             * torch.linspace(
                 start=1.0,
@@ -47,7 +47,7 @@ class BesselRBF(nn.Module):
         )
         self.register_buffer(
             "prefactor",
-            torch.tensor(np.sqrt(2.0 / cutoff), dtype=torch.get_default_dtype()),
+            torch.tensor(math.sqrt(2.0 / cutoff), dtype=torch.get_default_dtype()),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [...,1]

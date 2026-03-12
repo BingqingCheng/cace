@@ -1,9 +1,8 @@
 ###############################################
-# This module contains functions to compute the angular part of the 
+# This module contains functions to compute the angular part of the
 # edge basis functions
 ###############################################
 
-import numpy as np
 import torch
 import torch.nn as nn
 from math import factorial
@@ -126,7 +125,7 @@ def make_lxlylz_list(l_max: int):
 
 def l_index_select(l):
     """ select the index of the lxlylz_list based on l """
-    return np.arange(compute_length_lmax(l-1), compute_length_lmax(l))
+    return torch.arange(compute_length_lmax(l-1), compute_length_lmax(l))
 
 def make_lxlylz(l):
     """

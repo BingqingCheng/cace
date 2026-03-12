@@ -3,17 +3,21 @@ import glob
 import logging
 import torch
 import torch.nn as nn
-import lightning as L
-from typing import Dict, Optional, List, Tuple
-from lightning.pytorch.callbacks import LearningRateMonitor
-from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import Callback
-from datetime import datetime
+try:
+    import lightning as L
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Missing dependency: 'lightning'. "
+    ) from e
 from . import GetLoss
 from ..tools import Metrics
-from ..tools import torch_geometric
-from ..data import AtomicData
-from . import get_dataset_from_xyz, load_data_loader
+from typing import Dict, Optional, List, Tuple
+try:
+    from lightning.pytorch.callbacks import LearningRateMonitor
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        "Missing dependency: 'lightning'. "
+    ) from e
 
 __all__ = ["LightningModel","LightningTrainingTask","LightningData"]
 
