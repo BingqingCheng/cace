@@ -123,22 +123,3 @@ def layer_norm(input_tensors : Dict[int, torch.Tensor],eps:float=1e-10) -> Dict[
             output_tensors[l] = expand_to(factor,l+2) * input_tensors[l]
         return output_tensors
 
-#The below is taken from TensorNet
-#https://proceedings.neurips.cc/paper_files/paper/2023/hash/75c2ec5f98d7b2f50ad68033d2c07086-Abstract-Conference.html
-    
-@torch.jit.script
-def decompose_tensor(tensor : torch.Tensor) -> Tuple[torch.Tensor,torch.Tensor,torch.Tensor]:
-    """Partial tensor decomposition of rank 2 into irreducible components."""
-    I = (tensor.diagonal(offset=0, dim1=-1, dim2=-2)).mean(-1)
-    A = 0.5 * (tensor - tensor.transpose(-2, -1))
-    negI = I[...,None,None] * torch.eye(3, 3, device=tensor.device, dtype=tensor.dtype)
-    S = 0.5 * (tensor + tensor.transpose(-2, -1)) - negI
-    return I, A, S
-
-@torch.jit.script
-def irrep_tensors(input_tensors : Dict[int, torch.Tensor]) -> Dict[int, torch.Tensor]:
-    I, A, S = decompose_tensor(input_tensors[2])
-    input_tensors[0] = torch.hstack([input_tensors[0],I])
-    input_tensors[2] = torch.hstack([A,S])
-    return input_tensors
-
