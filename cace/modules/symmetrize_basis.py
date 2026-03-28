@@ -261,9 +261,7 @@ class Symmetrizer_Tensor(nn.Module):
 
 
 # A Symmetrizer
-# from .tensornet import TensorProductLayer, TensorLinearMixing, TensorFeedForward
-# from .tensornet_utils import expand_to, find_distances, find_moment, _scatter_add
-from .tensornet_utils import irrep_tensors, normalize_tensors, single_tensor_product
+from .tensornet_utils import single_tensor_product
 
 class Symmetrizer_A(nn.Module):
     def __init__(self, max_nu: int, max_l: int, max_l_out: int, lxlylz_list: list):
