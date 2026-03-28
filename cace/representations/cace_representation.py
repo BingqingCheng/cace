@@ -65,7 +65,6 @@ class Cace(nn.Module):
             max_l: the maximum l considered in the angular basis
             max_l_out: the maximum l output
             max_nu: the maximum correlation order in l=0 features
-            max_nu_out: the maximum correlation order in l>0 features
             num_message_passing: number of message passing layers
             avg_num_neighbors: average number of neighbors per atom, used for normalization
         """
