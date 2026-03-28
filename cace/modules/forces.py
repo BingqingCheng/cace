@@ -4,7 +4,7 @@ from torch import nn
 
 from .utils import get_outputs
 
-__all__ = ['Forces']
+__all__ = ['Forces', 'DirectForces']
 
 class Forces(nn.Module):
     """
@@ -70,4 +70,44 @@ class Forces(nn.Module):
     def __repr__(self):
         return (
             f"{self.__class__.__name__} (calc_forces={self.calc_forces}, calc_stress={self.calc_stress},) "
+            )
+
+from cace.modules.tensornet import TensorFeedForward
+
+class DirectForces(nn.Module):
+    """
+    Predicts forces directly from node_feats_l
+    """
+
+    def __init__(
+        self,
+        feature_key: str = 'node_feats_l',
+        forces_key: str = 'forces',
+    ):
+        """
+        Args:
+            forces_key: Key of the forces in results.
+        """
+        super().__init__()
+        self.feature_key = feature_key
+        self.forces_key = forces_key
+        self.model_outputs = []
+        self.model_outputs.append(forces_key)
+        self.required_derivatives = []
+        self.tensor_feed_forward = TensorFeedForward(1,lomax=1)
+
+    def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+        if self.feature_key not in data:
+            raise ValueError(f"Feature key {self.feature_key} not found in data dictionary.")
+        features = data[self.feature_key] #{0: l=0, 1:l=1, 2:l=2...}
+
+        out = self.tensor_feed_forward(features)
+        forces = out[1][:,0]
+        data[self.forces_key] = forces
+
+        return data 
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}"
             )
