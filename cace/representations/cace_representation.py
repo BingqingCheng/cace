@@ -1,3 +1,4 @@
+from cace.modules.symmetrize_basis import Symmetrizer, Symmetrizer_A
 import torch
 from torch import nn
 from typing import Callable, Dict, Sequence, Optional, List, Any
@@ -33,6 +34,7 @@ class Cace(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Callable,
         max_l: int,
+        max_l_out: int,
         max_nu: int,
         num_message_passing: int,
         node_encoder: Optional[nn.Module] = None,
@@ -45,7 +47,7 @@ class Cace(nn.Module):
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
-        keep_node_features_A: bool = False,
+        # keep_node_features_A: bool = False,
         forward_features: List[str] = [],
         charge_spin_key: Optional[str] = None,
     ):
@@ -61,7 +63,8 @@ class Cace(nn.Module):
             cutoff_fn: cutoff function
             cutoff: cutoff radius
             max_l: the maximum l considered in the angular basis
-            max_nu: the maximum correlation order
+            max_l_out: the maximum l output
+            max_nu: the maximum correlation order in l=0 features
             num_message_passing: number of message passing layers
             avg_num_neighbors: average number of neighbors per atom, used for normalization
         """
@@ -71,9 +74,10 @@ class Cace(nn.Module):
         self.n_atom_basis = n_atom_basis
         self.cutoff = cutoff
         self.max_l = max_l
+        self.max_l_out = max_l_out
         self.max_nu = max_nu
         self.mp_norm_factor = 1.0/(avg_num_neighbors)**0.5 # normalization factor for message passing
-        self.keep_node_features_A = keep_node_features_A
+        self.keep_node_features_A = (max_l_out > 0)
         self.forward_features = forward_features
 
         # layers
@@ -100,7 +104,6 @@ class Cace(nn.Module):
             self.charge_spin_embedding = NodeEmbedding(
                          node_dim=1, embedding_dim=self.n_atom_basis, random_seed=atom_embedding_random_seed[0]
                          )
-
 
         if edge_encoder is not None:
             self.edge_coding = edge_encoder
@@ -130,6 +133,8 @@ class Cace(nn.Module):
 
         self.l_list = self.angular_basis.get_lxlylz_list()
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
+        if max_l_out > 0:
+            self.symmetrizer_a = Symmetrizer_A(self.max_nu, self.max_l, self.max_l_out, self.l_list)
         # the JIT version seems to be slower
         #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)
         #self.symmetrizer = torch.jit.script(symmetrizer)
@@ -277,10 +282,13 @@ class Cace(nn.Module):
             node_feats_list.append(node_feat_B)
      
         node_feats_out = torch.stack(node_feats_list, dim=-1)
-        if hasattr(self, "keep_node_features_A") and self.keep_node_features_A:
+
+        if self.keep_node_features_A: #max_l_out > 0
             node_feats_A_out = torch.stack(node_feats_A_list, dim=-1)
+            l_feats_out = self.symmetrizer_a(node_feats_A_out)
+            l_feats_out[0] = node_feats_out.reshape(node_feats_out.shape[0],-1)
         else:
-            node_feats_A_out = None
+            l_feats_out = {}
 
         try:
             displacement = data["displacement"]
@@ -293,7 +301,7 @@ class Cace(nn.Module):
             "displacement": displacement,
             "batch": batch_now,
             "node_feats": node_feats_out,
-            #"node_feats_A": node_feats_A_out,
+            "node_feats_l": l_feats_out,
             }
 
         if hasattr(self, "forward_features") and len(self.forward_features) > 0:
