@@ -6,7 +6,7 @@ from .angular_tools import (
     find_combo_vectors_nu4
     )
 
-__all__ = ['Symmetrizer', 'Symmetrizer_JIT', 'Symmetrizer_Tensor']
+__all__ = ['Symmetrizer', 'Symmetrizer_JIT', 'Symmetrizer_Tensor','Symmetrizer_A']
 
 """
 This class is used to symmetrize the basis functions in the A basis.
@@ -259,3 +259,87 @@ class Symmetrizer_Tensor(nn.Module):
 
         return sym_node_attr
 
+
+# A Symmetrizer
+from .tensornet_utils import single_tensor_product
+
+class Symmetrizer_A(nn.Module):
+    def __init__(self, max_nu: int, max_l: int, max_l_out: int, lxlylz_list: list):
+        super().__init__()
+        if max_nu >= 4:
+            raise NotImplementedError
+
+        self.lxlylz_list = lxlylz_list
+        self.max_l = max_l
+        self.max_l_out = max_l_out
+        self.max_nu = max_nu
+
+        nu2_combos = [] #Symmetric
+        for l1 in range(1,max_l+1):
+            for l2 in range(l1,max_l+1):
+                for l3 in range(abs(l1 - l2), l1 + l2 + 1):  # triangle rule
+                    if (l1 + l2 + l3) % 2 != 0:
+                        continue
+                    if l3 == 0:
+                        continue
+                    if l3 <= max_l:
+                        nu2_combos.append((l1,l2,l3))
+
+        nu3_combos = []
+        for l1 in range(1,max_l+1):
+            for l2 in range(1,max_l+1):
+                for l3 in range(abs(l1 - l2), l1 + l2 + 1):  # triangle rule
+                    if (l1 + l2 + l3) % 2 != 0:
+                        continue
+                    if l3 == 0:
+                        continue
+                    if l3 <= max_l_out:
+                        nu3_combos.append((l1,l2,l3))
+         
+        self.nu2_combos = nu2_combos
+        self.nu3_combos = nu3_combos
+
+    def forward(self,node_attr_A: torch.Tensor):
+        a_basis = node_attr_A.movedim(2,0) #N x r x l x e^2 --> l x N x r x e^2
+        a_basis = a_basis.reshape(a_basis.shape[0],a_basis.shape[1],-1) #l x N x (r x e^2)
+        # adct = torch.jit.annotate(Dict[int, torch.Tensor], {})
+        adct = {}
+        adct[0] = a_basis[0]
+
+        import itertools
+        for l in range(1,self.max_l+1):
+            dim = [3]*l + [a_basis.shape[-2],a_basis.shape[-1]]
+            adct[l] = torch.zeros(*dim,device=node_attr_A.device)
+
+        for i,(lx,ly,lz) in enumerate(self.lxlylz_list[1:]):
+            l = lx + ly + lz
+            idx = [0]*lx + [1]*ly + [2]*lz
+            for p in itertools.permutations(idx):
+                adct[l][p] = a_basis[i+1]
+        for l in adct.keys():
+            adct[l] = adct[l].movedim(-1,0).movedim(-1,0)
+        #Adct is now {0:X,1:X,2:X...}
+
+        #nu = 1
+        bfeats = {}
+        for l in range(1,self.max_l_out+1):
+            bfeats[l] = [adct[l]]
+    
+        #nu = 2
+        nu2 = {k:[] for k in range(self.max_l+1)}
+        for l1,l2,l3 in self.nu2_combos:
+            btensor = single_tensor_product(adct[l1],adct[l2],(l1,l2,l3))
+            nu2[l3].append(btensor)
+        for l in range(1,self.max_l_out+1):
+            bfeats[l] = bfeats[l] + nu2[l]
+
+        #nu = 3
+        if self.max_nu == 3:
+            for l1,l2,l3 in self.nu3_combos:
+                for tl1 in nu2[l1]:
+                    btensor = single_tensor_product(tl1,adct[l2],(l1,l2,l3))
+                    bfeats[l3].append(btensor)
+
+        for l in range(1,self.max_l_out+1):
+            bfeats[l] = torch.hstack(bfeats[l])
+        return bfeats

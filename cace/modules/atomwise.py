@@ -31,7 +31,8 @@ class Atomwise(nn.Module):
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
-        post_process: Optional[Callable] = None
+        post_process: Optional[Callable] = None,
+        output_scale: Optional[float] = None,
     ):
         """
         Args:
@@ -80,6 +81,7 @@ class Atomwise(nn.Module):
         self.post_process = post_process
         self.bias = bias
         self.feature_key = feature_key
+        self.output_scale = output_scale
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -190,5 +192,7 @@ class Atomwise(nn.Module):
 
         if hasattr(self, "post_process") and self.post_process is not None:
             y = self.post_process(y)
+        if hasattr(self, "output_scale") and self.output_scale is not None:
+            y = y * self.output_scale
         data[self.output_key] = y[:, output_index] if output_index is not None else y
         return data
