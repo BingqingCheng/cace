@@ -24,6 +24,8 @@ from .atomwise import *
 
 from .ewald import *
 
+from .zbl import *
+
 from .forces import *
 
 from .interaction import *
